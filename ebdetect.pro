@@ -1,0 +1,1143 @@
+;+
+; NAME:
+;	  DETECT_EB
+;
+; PURPOSE:
+;	  This routine is meant for Ellerman bomb detection, but detects anything above a certain
+;   intensity threshold given the input parameters.
+;
+; CATEGORY:
+;   Data analysis
+;	
+; CALLING SEQUENCE:
+;	
+;
+; INPUTS:
+;	  inputfile - inputfile in CRISPEX-ready format
+;   nlp       - number of wavelength positions in inputfile
+;
+; OPTIONAL INPUTS:
+;
+; KEYWORD PARAMETERS:
+;   REGION_THRESHOLD  - region over which the mean and standard deviation should
+;                       be calculated. Takes either a string filename or a
+;                       4-element array [x0,y0,x1,y1].
+; OUTPUTS:
+;
+; OPTIONAL OUTPUTS:
+;
+; COMMON BLOCKS:
+;
+; SIDE EFFECTS:
+;
+; RESTRICTIONS:
+;   Requires the following procedures and functions:
+;   Procedures: LP_HEADER, LP_WRITE, MK_SUMMED_CUBE, PROCESS_TIMER
+;   Functions:  LP_GET()
+;
+; PROCEDURE:
+;
+; EXAMPLE:
+;
+; MODIFICATION HISTORY:
+;   2012 March Gregal Vissers: First version
+;   2012 Dec 12 GV: Updated version of old routine
+;   $Id$
+;-
+;
+PRO DETECT_EB, inputfile, nlp, $    ; input file, number of spectral positions in input file
+               ; Detection constraints and switches
+               LC_POS=lc_pos, $                               ; position to take into account
+               LC_SIGMA=lc_sigma, $                           ; sigma for lc constraint
+               LOOSE_HYSTERESIS=loose_hysteresis, $           ; apply loose intensity hysteresis
+               SIZE_CONSTRAINT=size_constraint, $             ; minimum nr of connected pixels
+               KERNEL_SIZE=kernel_size, $                     ; apply size constraints to kernel
+               DOUBLE_SET=double_set, $                       ; use double precision in MEAN/STDEV
+               LIFETIME_CONSTRAINT=lifetime_constraint, $     ; minimum lifetime in timesteps
+               SIGMA_CONSTRAINT=sigma_constraint, $           ; minimum sigma counts above average
+               FACTOR_SIGMA=factor_sigma, $                   ; sigma is not sigma, but % of mean
+               REGION_THRESHOLD=region_threshold, $           ; region to determine mean and sigma 
+               RUNNING_MEAN=running_mean, $                   ; use running MEAN and STDEV
+               OVERLAP_CONSTRAINT=overlap_constraint, $       ; minimum spatial overlap between steps
+               T_SKIP_CONSTRAINT=t_skip_constraint, $         ; maximum nr of steps before overlap
+	             SUM_POSITIONS=sum_positions, $                 ; spectral positions to sum over
+               SUM_CUBE=sum_cube, $                           ; input summed cube
+               LC_SUM_CUBE=lc_sum_cube, $                     ; input lc summed cube
+               MERGE_CHECK=merge_check, $                     ; check for merging events
+               SPLIT_CHECK=split_check, $                     ; check for splitting events
+               OVERRIDE_MERGE=override_merge,$                ; override merging
+               REMOVE_DETECTIONS=remove_detections, $         ; labels of detections to be removed
+               COMPARISON_MASK=comparison_mask, $             ; cube with mask for comparison
+               PAD=pad, $                                     ; add padding
+               LIMIT_GROUP_SEARCH=limit_group_search, $       ; limit timespan to look for same label
+               GET_KERNELS=get_kernels, $                     ; get kernel info
+               ; Output switches
+               WRITE_MASK_CUBE=write_mask_cube, $             ; write mask cube switch
+               WRITE_FIRST_DETECT=write_first_detect, $       ; write threshold detect file switch
+               FIRST_DETECT_FILE=first_detect_file, $         ; input threshold detect file
+               WRITE_OVERLAP_DETECT=write_overlap_detect, $   ; write overlap detection file switch
+	             WRITE_FINAL_MASK_CUBE=write_final_mask_cube, $ ; write final mask cube switch
+               WRITE_INPLACE=write_inplace, $                 ; use LP_PUT to write cube
+               VERBOSE=verbose                                ; verbose switch
+
+; =================================================================================================
+; Read in variables
+  PRINT,'Status: processing variables and switches...'
+	LP_HEADER,inputfile,nx=nx, ny=ny, nt=imnt
+	nt = imnt/nlp
+  ; Intensity thresholds and switches
+	IF (N_ELEMENTS(SIGMA_CONSTRAINT) LT 1) THEN sigma_constraint = 0. ELSE BEGIN
+    sigma_constraint = sigma_constraint[SORT(sigma_constraint)]
+    nlevels = N_ELEMENTS(sigma_constraint)
+  ENDELSE
+  nlc_pos = N_ELEMENTS(LC_POS)
+  IF (N_ELEMENTS(LC_SIGMA) GT 1) THEN $
+    lc_sigma = lc_sigma[SORT(lc_sigma)]
+  ; Spatial thresholds
+  min_size = 0
+  max_size = LONG(nx)*LONG(ny)
+  dataratio = nx/FLOAT(ny)
+	IF (N_ELEMENTS(SIZE_CONSTRAINT) GE 1) THEN min_size = size_constraint[0] 
+	IF (N_ELEMENTS(SIZE_CONSTRAINT) EQ 2) THEN max_size = size_constraint[1] 
+  IF (N_ELEMENTS(OVERLAP_CONSTRAINT) NE 1) THEN overlap_constraint = 1.
+	IF (N_ELEMENTS(MERGE_CHECK) NE 1) THEN merge_check = 1
+  ; Lifetime thresholds
+  min_lifetime = 0
+  max_lifetime = nt
+	IF (N_ELEMENTS(LIFETIME_CONSTRAINT) GE 1) THEN min_lifetime = lifetime_constraint[0] 
+	IF (N_ELEMENTS(LIFETIME_CONSTRAINT) EQ 2) THEN max_lifetime = lifetime_constraint[1] 
+	IF (N_ELEMENTS(T_SKIP_CONSTRAINT) NE 1) THEN t_skip_constraint = 1
+  ; Verbosity 
+  IF (N_ELEMENTS(VERBOSE) NE 1) THEN verbose = 0
+
+; =================================================================================================
+	; Sum wings
+	; Feed positions to SUM_POSITIONS
+	; Writing of the summed cube is implied
+	IF (N_ELEMENTS(SUM_POSITIONS) GE 1) THEN BEGIN
+    PRINT,'Status: creating summed wing cube...'
+    MK_SUMMED_CUBE, inputfile, sum_positions, NLP=nlp, NS=ns, SET_NS=set_ns
+  ENDIF
+                    
+  IF (nlc_pos GT 1) THEN BEGIN
+    PRINT,'Status: creating summed line center cube...'
+    MK_SUMMED_CUBE, inputfile, lc_pos, NLP=nlp, NS=ns, SET_NS=set_ns, $
+      OUTPUTFILENAME='lcsum_'+FILE_BASENAME(inputfile)
+  ENDIF
+
+	IF (verbose EQ 2) THEN STOP
+
+; =================================================================================================
+; Run first detection based on the intensity and size thresholds
+; Supply SUM_CUBE with filename if not continuing from before
+; Set keyword WRITE_FIRST_DETECT to write detections to file
+	IF (N_ELEMENTS(FIRST_DETECT_FILE) NE 1) THEN BEGIN
+    IF (N_ELEMENTS(RUNNING_MEAN) EQ 1) THEN BEGIN
+      IF (SIZE(RUNNING_MEAN,/TYPE) NE 7) THEN BEGIN
+        running_mean_summed_cube = FLTARR(nt)
+        running_sdev = FLTARR(nt)
+        t0 = SYSTIME(/SECONDS)
+        FOR t=0L,nt-1 DO BEGIN
+          tlow = (t-running_mean) > 0
+          tupp = (tlow + running_mean) < (nt-1)
+          ; determine average 
+          FOR tt=tlow,tupp DO BEGIN
+            selpix = WHERE(LP_GET(REGION_THRESHOLD,tt) EQ 1)
+            IF (t EQ 0) THEN $
+              tmp_mean_summed_cube = [(LP_GET(sum_cube,tt))[selpix]] $
+            ELSE $
+              tmp_mean_summed_cube = [running_mean_summed_cube, (LP_GET(sum_cube,tt))[selpix]]
+          ENDFOR
+          running_mean_summed_cube[t] = MEAN(tmp_mean_summed_cube,DOUBLE=KEYWORD_SET(DOUBLE_SET),/NAN)
+          IF ~KEYWORD_SET(FACTOR_SIGMA) THEN BEGIN
+            IF KEYWORD_SET(DOUBLE_SET) THEN $
+      		    running_sdev[t] = STDDEV(DOUBLE(tmp_mean_summed_cube),/NAN) $                       ; Determine the standard deviation in the cube
+            ELSE $
+      		    running_sdev[t] = STDDEV(tmp_mean_summed_cube,/NAN)                        ; Determine the standard deviation in the cube
+          ENDIF
+          PROCESS_TIMER,t+1,nt,t0, EXTRA_OUTPUT='Determining running mean...'
+        ENDFOR
+        PRINT,'done!'
+  			outputfilename='detect_eb_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
+                        FILE_BASENAME(sum_cube)+'_running_mean_sdev.save'
+  			SAVE, running_mean_summed_cube,running_sdev, FILENAME=outputfilename
+  			PRINT,'Written: '+outputfilename
+      ENDIF ELSE RESTORE, running_mean, VERBOSE=verbose
+    ENDIF ELSE BEGIN
+      ; Read in summed wing cube
+  		IF (N_ELEMENTS(SUM_CUBE) EQ 1) THEN BEGIN
+        summed_cube = FLTARR(nx,ny,nt)
+        t0 = SYSTIME(/SECONDS)
+        FOR t=0,nt-1 DO BEGIN
+          summed_cube[*,*,t] = LP_GET(sum_cube,t)
+          PROCESS_TIMER,t+1,nt,t0,EXTRA_OUTPUT='Getting summed wing cube in memory...'
+        ENDFOR
+        PRINT,'done!'
+      ENDIF
+      IF (N_ELEMENTS(REGION_THRESHOLD) GE 1) THEN BEGIN
+        IF (N_ELEMENTS(REGION_THRESHOLD) EQ 4) THEN $
+          sel_summed_cube = summed_cube[region_threshold[0]:region_threshold[2],$
+                                        region_threshold[1]:region_threshold[3],*] $
+        ELSE BEGIN
+          t0 = SYSTIME(/SECONDS)
+          FOR t=0L,nt-1 DO BEGIN
+            selpix = WHERE(LP_GET(REGION_THRESHOLD,t) EQ 1, count)
+            IF (count NE 0) THEN BEGIN
+              IF (t EQ 0) THEN $
+                sel_summed_cube = [(LP_GET(sum_cube,t))[selpix]] $
+              ELSE $
+                sel_summed_cube = [sel_summed_cube, (LP_GET(sum_cube,t))[selpix]]
+            ENDIF
+            PROCESS_TIMER,t+1,nt,t0, EXTRA_OUTPUT='Determining selected summed wing cube pixels...'
+          ENDFOR            
+          PRINT,'done!'
+        ENDELSE
+      ENDIF ELSE $
+        sel_summed_cube = summed_cube
+      IF ~KEYWORD_SET(FACTOR_SIGMA) THEN BEGIN
+        IF KEYWORD_SET(DOUBLE_SET) THEN $
+  		    sdev = STDDEV(DOUBLE(sel_summed_cube),/NAN) $                       ; Determine the standard deviation in the cube
+        ELSE $
+  		    sdev = STDDEV(sel_summed_cube,/NAN)                        ; Determine the standard deviation in the cube
+      ENDIF
+  		mean_summed_cube = MEAN(sel_summed_cube,DOUBLE=KEYWORD_SET(DOUBLE_SET),/NAN)             ; Determine the average of the cube
+    ENDELSE
+    ; Determine line center constraints if any given
+    IF (N_ELEMENTS(lc_sigma) EQ 1) THEN BEGIN
+      lc_summed_cube = FLTARR(nx,ny,nt)
+      IF (N_ELEMENTS(LC_SUM_CUBE) EQ 1) THEN BEGIN
+        FOR t=0,nt-1 DO lc_summed_cube[0,0,t] = LP_GET(lc_sum_cube,t)
+      ENDIF ELSE BEGIN
+        FOR t=0,nt-1 DO lc_summed_cube[0,0,t] = LP_GET(inputfile,t*nlp+lc_pos)
+      ENDELSE
+      IF (N_ELEMENTS(REGION_THRESHOLD) GE 1) THEN BEGIN
+        IF (N_ELEMENTS(REGION_THRESHOLD) EQ 4) THEN $
+          sel_lc_summed_cube = lc_summed_cube[region_threshold[0]:region_threshold[2],$
+                                        region_threshold[1]:region_threshold[3],*] $
+        ELSE BEGIN
+          t0 = SYSTIME(/SECONDS)
+          FOR t=0L,nt-1 DO BEGIN
+            lc_selpix = WHERE(LP_GET(REGION_THRESHOLD,t) EQ 1, count)
+            IF (count NE 0) THEN BEGIN
+              IF (t EQ 0) THEN $
+                sel_lc_summed_cube = [(LP_GET(lc_sum_cube,t))[lc_selpix]] $
+              ELSE $
+                sel_lc_summed_cube = [sel_lc_summed_cube, (LP_GET(lc_sum_cube,t))[lc_selpix]]
+            ENDIF
+            PROCESS_TIMER,t+1,nt,t0, $
+              EXTRA_OUTPUT='Determining selected summed line center cube pixels...'
+          ENDFOR
+          PRINT,'done!'
+        ENDELSE
+      ENDIF ELSE $
+        sel_lc_summed_cube = lc_summed_cube
+      sdev_lc_cube = STDDEV(sel_lc_summed_cube, DOUBLE=KEYWORD_SET(DOUBLE_SET), /NAN)
+      mean_lc_cube = MEAN(sel_lc_summed_cube,DOUBLE=KEYWORD_SET(DOUBLE_SET), /NAN)
+      print,mean_lc_cube,sdev_lc_cube
+    ENDIF
+		mask_cube = BYTARR(nx,ny,nt)                     ; Define empty mask cube
+		totalpixels = LONG(nx)*LONG(ny)
+		results = PTRARR(nt,/ALLOCATE_HEAP)
+		pass = 0L
+		totnstructs = 0L
+		totnlabels = 0L
+		IF KEYWORD_SET(VERBOSE) THEN WINDOW,XSIZE=512*dataratio,YSIZE=512
+		t0 = SYSTIME(/SECONDS)
+		FOR t=0L,nt-1 DO BEGIN
+			mask = BYTARR(nx,ny)                           ; Define empty mask
+			select_summed_cube = LP_GET(sum_cube,t)
+      ; Select the pixels where cube intensity > mean intensity + sigma * stdev
+      IF KEYWORD_SET(RUNNING_MEAN) THEN BEGIN
+        mean_summed_cube = running_mean_summed_cube[t]
+        sdev = running_sdev[t]
+      ENDIF
+      FOR s=0,nlevels-1 DO BEGIN                      ; Allow for hysteresis constraints
+        IF KEYWORD_SET(FACTOR_SIGMA) THEN  $
+          threshold = mean_summed_cube*sigma_constraint[s] $
+        ELSE $
+          threshold = mean_summed_cube+sigma_constraint[s]*sdev
+  			wheregt = WHERE(select_summed_cube GT threshold, count)			
+        IF (count NE 0) THEN $
+    			mask[wheregt] += 1B                              ; Increase mask pixels gt constraint with 1
+      ENDFOR
+      ; Process line center condition, i.e., I < lc_threshold
+      IF (N_ELEMENTS(LC_SIGMA) EQ 1) THEN BEGIN
+        IF (N_ELEMENTS(LC_SUM_CUBE) EQ 1) THEN $
+          select_lc_cube = LP_GET(lc_sum_cube,t) $
+        ELSE $
+          select_lc_cube = LP_GET(inputfile,t*nlp+lc_pos)
+        lc_threshold = mean_lc_cube + lc_sigma[0]*sdev_lc_cube
+        wheregtlc = WHERE(select_lc_cube GT lc_threshold, lc_count)
+        IF (lc_count NE 0) THEN mask[wheregtlc] = 0B
+      ENDIF
+      ; Pad mask
+      IF KEYWORD_SET(PAD) THEN BEGIN
+        pad_mask = BYTARR(nx+2,ny+2)
+        pad_mask[1:nx,1:ny] = mask
+      ENDIF ELSE pad_mask = mask
+      wheregt0 = WHERE(pad_mask GT 0, nwheregt0)          ; Where pixels gt lower threshold
+      IF (nlevels GT 1) THEN $
+        wheregt1 = WHERE(pad_mask GT 1, nwheregt1) $          ; Where pixels gt upper threshold
+      ELSE BEGIN
+        wheregt1  = wheregt0
+        nwheregt1 = nwheregt0
+      ENDELSE
+			IF KEYWORD_SET(PAD) THEN $
+        struct_mask = BYTARR(nx+2,ny+2) $
+      ELSE $
+			  struct_mask = BYTARR(nx,ny)
+			IF (wheregt1[0] NE -1) THEN BEGIN
+				nstructs = 0L
+				discard_pix = -1                            ; Pixel coordinates to be discarded, init val
+				FOR i=0L,nwheregt1-1 DO BEGIN									; Loop over all selected pixels
+          ; If the considered pixel is not a discarded pixel, begin growing region
+					IF (TOTAL(discard_pix EQ wheregt1[i]) LE 0) THEN BEGIN					
+            IF (nwheregt1 GT 1) THEN BEGIN
+            ; Grow the region of selected pixels touching the selected pixel
+              IF KEYWORD_SET(LOOSE_HYSTERESIS) THEN $
+    						structpix = REGION_GROW(pad_mask,wheregt1[i],/ALL)	$
+              ELSE BEGIN
+  						  structpix = REGION_GROW(pad_mask,wheregt1[i],/ALL, THRESH=[1,2])
+              ENDELSE
+            ENDIF ELSE structpix = wheregt1[i]
+						nstructpix = N_ELEMENTS(structpix)
+						IF (N_ELEMENTS(SIZE_CONSTRAINT) GE 1) THEN BEGIN
+;              ; If the grown region >= size constraint, check whether max size is set
+;							IF (nstructpix GE min_size) THEN BEGIN					
+;                IF (N_ELEMENTS(MAX_SIZE) EQ 1) THEN BEGIN
+;                  ; If the grown region <= max size, discard all pixels of region in next grow
+;                  IF (nstructpix LE max_size) THEN BEGIN
+;    								discard_pix = structpix[1:nstructpix-1]
+;    								struct_mask[structpix] = 1B					; Add the region to the mask
+;    								nstructs += 1L
+;    								totnstructs += 1L
+;                  ENDIF
+;                ENDIF ELSE BEGIN
+;  								discard_pix = structpix[1:nstructpix-1]
+;  								struct_mask[structpix] = 1B						; Add the region to the mask
+;  								nstructs += 1L
+;  								totnstructs += 1L
+;                ENDELSE
+;							ENDIF
+							IF ((nstructpix GE min_size) AND (nstructpix LE max_size)) THEN BEGIN
+    						IF (nstructpix NE 1) THEN $     ; Added check for limb-to-limb
+                  discard_pix = structpix[1:nstructpix-1] $
+                ELSE $
+                  discard_pix = -1
+    						struct_mask[structpix] = 1B					; Add the region to the mask
+    						nstructs += 1L
+    						totnstructs += 1L
+              ENDIF
+						ENDIF ELSE BEGIN
+    					IF (nstructpix NE 1) THEN $       ; Added check for limb-to-limb
+                discard_pix = structpix[1:nstructpix-1] $
+              ELSE $
+                discard_pix = -1
+;							discard_pix = structpix[1:nstructpix-1]
+							struct_mask[structpix] = 1B						; Add the region to the mask
+							nstructs += 1L
+							totnstructs += 1L
+						ENDELSE
+					ENDIF
+				ENDFOR
+				IF (TOTAL(WHERE(struct_mask GT 0)) NE -1) THEN BEGIN
+          ; Pad struct_mask
+;          tmp_struct_mask = BYTARR(nx+2,ny+2)         ; New for padding 
+;          tmp_struct_mask[1:nx,1:ny] = struct_mask    ; New for padding
+					labels = LABEL_REGION(struct_mask,/ALL_NEIGHBORS)								; Label the pixels of all regions
+          IF KEYWORD_SET(PAD) THEN BEGIN
+            labels = labels[1:nx,1:ny]                  ; New because of padding
+;            tmp_mask = pad_mask[1:nx,1:ny]
+          ENDIF
+					nlabels = MAX(labels,/NAN)
+					nlabels_pix = N_ELEMENTS(WHERE(labels GT 0))							
+					nstruct_pix = N_ELEMENTS(WHERE(struct_mask GT 0))
+					IF (nstruct_pix NE nlabels_pix) THEN BEGIN							
+            ; If number of structure pixels != the number of label pixels, stop with error
+						PRINT,'Something is very wrong here... '+STRTRIM(nstruct_pix,2)+' NE '+STRTRIM(nlabels_pix,2)
+						STOP
+					ENDIF ELSE BEGIN										
+            ; If nlabel_pix = nstructs_pix, then start writing results
+						label_vals = LINDGEN(nlabels)+1
+						structs = PTRARR(nlabels,/ALLOCATE_HEAP)
+            ; Loop over all labels
+						FOR j=0,nlabels-1 DO BEGIN								
+              ; Select the pixels corresponding to current label
+							positions = WHERE(labels EQ label_vals[j])					
+              ; Write results to pointer
+;              IF KEYWORD_SET(LOOSE_HYSTERESIS) THEN $
+							  *structs[j] = CREATE_STRUCT('label',label_vals[j]+totnlabels,'pos',positions)	
+;              ELSE BEGIN
+;                wherekernel = positions[WHERE(tmp_mask[positions] GT 1,nwherekernel)]
+;          			IF KEYWORD_SET(PAD) THEN $
+;                  kernel_mask = BYTARR(nx+2,ny+2) $
+;                ELSE $
+;          			  kernel_mask = BYTARR(nx,ny)
+;          			IF (wherekernel[0] NE -1) THEN BEGIN
+;          				nkerknels = 0L
+;          				discard_kernelpix = -1                            ; Pixel coordinates to be discarded, init val
+;          				FOR k=0L,nwherekernel-1 DO BEGIN									; Loop over all selected pixels
+;                    ; If the considered pixel is not a discarded pixel, begin growing region
+;          					IF (TOTAL(discard_kernelpix EQ wherekernel[k]) LE 0) THEN BEGIN					
+;                      IF (nwherekernel GT 1) THEN $
+;                      ; Grow the region of selected pixels touching the selected pixel
+;            						kernelpix = REGION_GROW(pad_mask,wherekernel[k],/ALL, THRESH=2)
+;                      ELSE kernelpix = wherekernel[k]
+;          						nkernelpix = N_ELEMENTS(kernelpix)
+;              					IF (nkernelpix NE 1) THEN $       ; Added check for limb-to-limb
+;                          discard_kernelpix = kernelpix[1:nkernelpix-1] $
+;                        ELSE $
+;                          discard_kernelpix = -1
+;          							kernel_mask[kernelpix] = 1B						; Add the region to the mask
+;          							nkernels += 1L
+;          							totnkernels += 1L
+;          					ENDIF
+;          				ENDFOR
+;                ENDIF
+;						    kernels = PTRARR(nkernels,/ALLOCATE_HEAP)
+;							  *structs[j] = CREATE_STRUCT('label',label_vals[j]+totnlabels,'pos',positions,$
+;                                'nkernels',nkernels,
+;              ENDELSE  
+;              stop
+						ENDFOR
+					ENDELSE
+					IF KEYWORD_SET(VERBOSE) THEN BEGIN
+;            TVSCL,CONGRID(select_summed_cube,512*dataratio,512)
+;            CONTOUR,CONGRID(labels,512*dataratio,512),$
+;              XS=13,YS=13,POS=[0,0,1,1],/NOERASE,/OVERPLOT,/ISOTROPIC
+            TVSCL,CONGRID(labels,512*dataratio,512)
+          ENDIF
+				ENDIF ELSE BEGIN
+					nlabels = 0
+					structs = 0
+				ENDELSE
+				totnlabels += nlabels
+			ENDIF ELSE BEGIN
+				struct_mask = mask
+				nlabels = 0
+				structs = 0
+			ENDELSE
+			mask_cube[*,*,t] = mask
+      ; Write time marker, number of detections and structures pointer to results pointer
+ ;     IF KEYWORD_SET(LOOS_HYSTERESIS) THEN $
+			  *results[t] = CREATE_STRUCT('t',t,'ndetect',nlabels,'structs',structs) 
+;      ELSE $
+;			  *results[t] = CREATE_STRUCT('t',t,'ndetect',nlabels,'structs',structs,'kernels',kernels)
+			pass += 1L
+			PROCESS_TIMER, pass, nt, t0, EXTRA_OUTPUT=' Pixels detected: '+STRTRIM(nwheregt1,2)+'+'+$
+                    STRTRIM(nwheregt0,2)+'/'+STRTRIM(totalpixels,2)+$
+                   '. Detected structures: '+STRTRIM(nlabels,2)+'/'+STRTRIM(totnlabels,2)+'.'
+		ENDFOR
+   ; Write thresholding detections to file
+		IF KEYWORD_SET(WRITE_FIRST_DETECT) THEN BEGIN									
+			ndetections = totnlabels
+			outputfilename='detect_eb_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
+                      FILE_BASENAME(sum_cube)+'_det1.save'
+			SAVE, results, ndetections, FILENAME=outputfilename
+			PRINT,'Written: '+outputfilename
+		ENDIF
+	  IF (verbose EQ 2) THEN STOP
+	ENDIF
+
+; =================================================================================================
+; Overlap filter: only propagate cases for which certain overlap criteria are obeyed
+; All detections at t=0 are "true"
+; If a first detection file is supplied, restore it now
+	IF (N_ELEMENTS(FIRST_DETECT_FILE) EQ 1) THEN RESTORE,first_detect_file							
+	pass = 0L
+	totpasses = 0L
+	tt = 0
+	first_detect = 0
+	WHILE (first_detect EQ 0) DO BEGIN
+		IF ((*results[tt]).ndetect GT 0) THEN BEGIN
+			detect_counter = LONG((*(*results[tt]).structs[(*results[tt]).ndetect-1]).label)
+			first_detect = 1
+		ENDIF
+		tt += 1
+	ENDWHILE
+	FOR t=0L,nt-2 DO totpasses += LONG((*results[t]).ndetect)
+	t0 = SYSTIME(/SECONDS)
+  ; Loop over all but the last time step
+	FOR t=0L,nt-1 DO BEGIN													
+		IF (VERBOSE EQ 2) THEN PRINT,'---------------------------------->',t
+    ; Loop over all detections at the current time step
+		FOR j=0,(*results[t]).ndetect-1 DO BEGIN									
+			pass += 1L
+      ; If the label of the current detection is bigger than the detection counter
+			IF ((*(*results[t]).structs[j]).label GT detect_counter) THEN BEGIN					
+        ; Increase the detection counter by 1
+				detect_counter += 1L										
+        ; Relabel the current detection with the updated detection counter
+				(*(*results[t]).structs[j]).label = detect_counter						
+			ENDIF
+			orig_detection = (*(*results[t]).structs[j]).pos
+			;;; Check for splitting events ;;;
+			overlapped = 0
+			ncor = 0
+			k_array = -1
+			ncomarr = -1
+			t_usel = t
+			t_ubound = (t + t_skip_constraint) < (nt-1)
+			WHILE ((overlapped EQ 0) AND (t_usel LT t_ubound)) DO BEGIN
+				IF (t_usel LT t_ubound) THEN t_usel += 1
+        ; Loop over all detections at the next time step
+				FOR k=0,(*results[t_usel]).ndetect-1 DO BEGIN								
+					comp_detection = (*(*results[t_usel]).structs[k]).pos
+          ; Find the common elements between the considered detections
+					ARRAY_COMPARE,orig_detection,comp_detection,/COMMON_ELEMENTS,COMMON_ARRAY=comarr,$
+                        NCOMMON_ARRAY=ncomarr_val		
+					position_label = ' (t,det_orig,t_comp,det_comp)=('+STRTRIM(t,2)+','+STRTRIM(j,2)+','+$
+                           STRTRIM(t_usel,2)+','+STRTRIM(k,2)+'). Single detections: '+$
+                           STRTRIM(detect_counter,2)+'.'
+          ; If the number of common elements >= overlap constraint
+					IF ((N_ELEMENTS(comarr) GE overlap_constraint) AND (TOTAL(comarr) NE -1)) THEN BEGIN		
+						IF (TOTAL(k_array) EQ -1) THEN k_array = k ELSE k_array = [k_array,k]
+						IF (TOTAL(ncomarr) EQ -1) THEN ncomarr = ncomarr_val ELSE ncomarr = [ncomarr,ncomarr_val]
+						overlapped = 1
+						ncor += 1
+					ENDIF
+				ENDFOR
+			ENDWHILE
+			IF overlapped THEN BEGIN											; If overlap occurs, assign the labels
+				IF (ncor GT 1) THEN BEGIN
+					wheremaxoverlap = WHERE(ncomarr EQ MAX(ncomarr,/NAN),COMPLEMENT=wherenotmaxoverlap,NCOMPLEMENT=nwherenotmaxoverlap)
+					oldlabel = (*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label 
+					(*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label = (*(*results[t]).structs[j]).label 		; Assign the next detection the current detection label
+          extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
+            STRTRIM((*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label,2)+','+$
+            STRTRIM(ncomarr[0],2)
+;					PRINT,t,oldlabel,'>',(*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label,ncomarr[0]
+					FOR kk=0,nwherenotmaxoverlap-1 DO BEGIN
+						oldlabel = (*(*results[t_usel]).structs[k_array[wherenotmaxoverlap[kk]]]).label 
+						detect_counter += 1L										; - Increase the detection counter by 1
+;						PRINT,t_usel,oldlabel,'>',(*(*results[t_usel]).structs[k_array[wherenotmaxoverlap[kk]]]).label,ncomarr[kk]
+						(*(*results[t_usel]).structs[k_array[wherenotmaxoverlap[kk]]]).label = detect_counter 		; Assign the next detection the current detection label
+					ENDFOR
+				ENDIF ELSE BEGIN
+					oldlabel = (*(*results[t_usel]).structs[k_array[0]]).label 
+					(*(*results[t_usel]).structs[k_array[0]]).label = (*(*results[t]).structs[j]).label 		; Assign the next detection the current detection label
+          extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
+            STRTRIM((*(*results[t_usel]).structs[k_array[0]]).label,2)+','+$
+            STRTRIM(ncomarr[0],2)
+;					PRINT,t_usel,oldlabel,'>',(*(*results[t_usel]).structs[k_array[0]]).label,ncomarr[0]
+				ENDELSE
+			ENDIF ELSE BEGIN
+        extraout = 'No overlap: '+STRTRIM((*(*results[t]).structs[j]).label,2)
+;				PRINT,t,(*(*results[t]).structs[j]).label
+			ENDELSE
+      PROCESS_TIMER, t+1, nt, t0, EXTRA=extraout
+		ENDFOR
+	ENDFOR
+	last_detect_counter = detect_counter
+;	FOR j=0,(*results[nt-1]).ndetect-1 DO BEGIN										; Loop over all detections at the last time step
+;		IF ((*(*results[nt-1]).structs[j]).label GT last_detect_counter) THEN BEGIN					; If the detection label exceeds the last detection counter
+;			detect_counter += 1L											; - Increase the detection counter by 1
+;			(*(*results[nt-1]).structs[j]).label = detect_counter							; - Relabel that detection with the updated detection counter
+;		ENDIF
+;	ENDFOR
+	IF (verbose EQ 2) THEN STOP
+	;;; Check for merging events ;;;
+	IF KEYWORD_SET(MERGE_CHECK) THEN BEGIN
+    PRINT,''
+		PRINT,'Status: Performing merge check...'
+		pass = 0L
+		totpasses = 0L
+		FOR t=0,nt-1 DO totpasses += LONG((*results[t]).ndetect)
+		t0 = SYSTIME(/SECONDS)
+		FOR t_dum=0,nt-1 DO BEGIN													; Loop over all but the last time step
+			t = nt-t_dum-1
+;			PRINT,'---------------------------------->',t
+			FOR j=0,(*results[t]).ndetect-1 DO BEGIN									; Loop over all detections at the current time step
+				pass += 1L
+				orig_detection = (*(*results[t]).structs[j]).pos
+				overlapped = 0
+				ncor = 0
+				k_array = -1
+				ncomarr = -1
+				t_lsel = t
+				t_lbound = (t - t_skip_constraint) > 0
+				WHILE ((overlapped EQ 0) AND (t_lsel GT t_lbound)) DO BEGIN						; Check labels and overlap
+					IF (t_lsel GT t_lbound) THEN t_lsel -= 1
+					FOR k=0,(*results[t_lsel]).ndetect-1 DO BEGIN								; Loop over all detections at the next time step
+						comp_detection = (*(*results[t_lsel]).structs[k]).pos
+						ARRAY_COMPARE,orig_detection,comp_detection,/COMMON_ELEMENTS,COMMON_ARRAY=comarr,NCOMMON_ARRAY=ncomarr_val		; Find the common elements between the considered detections
+						position_label = ' (t,det_orig,t_comp,det_comp)=('+STRTRIM(t,2)+','+STRTRIM(j,2)+','+STRTRIM(t_lsel,2)+','+STRTRIM(k,2)+'). Single detections: '+STRTRIM(detect_counter,2)+'.'
+						IF ((N_ELEMENTS(comarr) GE overlap_constraint) AND (TOTAL(comarr) NE -1)) THEN BEGIN		; If the number of common elements >= overlap constraint
+							IF (TOTAL(k_array) EQ -1) THEN k_array = k ELSE k_array = [k_array,k]
+							IF (TOTAL(ncomarr) EQ -1) THEN ncomarr = ncomarr_val ELSE ncomarr = [ncomarr,ncomarr_val]
+							overlapped = 1
+							ncor += 1
+						ENDIF
+;						PROCESS_TIMER, pass, totpasses, t0, EXTRA_OUTPUT=position_label
+					ENDFOR
+				ENDWHILE			
+				IF overlapped THEN BEGIN										; If overlap occured, assign labels
+					IF (ncor GT 1) THEN BEGIN
+						wheremaxoverlap = WHERE(ncomarr EQ MAX(ncomarr,/NAN))
+						oldlabel = (*(*results[t]).structs[j]).label
+						newlabel = (*(*results[t_lsel]).structs[k_array[wheremaxoverlap[0]]]).label 
+            extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
+            STRTRIM(newlabel,2)+','+STRTRIM(ncomarr[wheremaxoverlap[0]],2)
+;						PRINT,t,oldlabel,'>',newlabel,ncomarr[wheremaxoverlap[0]]
+						(*(*results[t]).structs[j]).label = newlabel						;Assign the current detection the previous detection label
+						FOR tt = t+1,nt-1 DO BEGIN
+							kk = 0
+							newlabel_set = 0
+							WHILE ((newlabel_set EQ 0) AND (kk LT (*results[tt]).ndetect-1)) DO BEGIN
+								kk += 1	
+								IF ((*(*results[tt]).structs[kk]).label EQ oldlabel) THEN BEGIN
+;									PRINT,tt,(*(*results[tt]).structs[kk]).label,'>',newlabel
+									(*(*results[tt]).structs[kk]).label = newlabel
+									newlabel_set = 1
+								ENDIF
+							ENDWHILE
+						ENDFOR
+					ENDIF
+				ENDIF
+        PROCESS_TIMER,t_dum+1,nt,t0,EXTRA=extraout
+			ENDFOR
+		ENDFOR
+	ENDIF
+
+	IF (N_ELEMENTS(OVERRIDE_MERGE) EQ 4) THEN BEGIN
+		PRINT,'Overriding merge detection:'
+		FOR t=override_merge[0],override_merge[1] DO BEGIN
+			FOR k=0,(*results[t]).ndetect-1 DO BEGIN
+				oldlabel = (*(*results[t]).structs[k]).label 
+				IF (oldlabel EQ override_merge[2]) THEN BEGIN
+					(*(*results[t]).structs[k]).label = override_merge[3]
+					PRINT,t,k,oldlabel,'('+STRTRIM(override_merge[2],2)+') >',override_merge[3]
+				ENDIF ELSE PRINT,t,k,oldlabel
+			ENDFOR
+		ENDFOR
+	ENDIF
+
+  PRINT,''
+	PRINT,'Final number of single detections: '+STRTRIM(detect_counter,2)
+	IF (verbose EQ 2) THEN STOP
+	IF (KEYWORD_SET(VERBOSE) OR KEYWORD_SET(WRITE_OVERLAP_DETECT)) THEN BEGIN
+		IF KEYWORD_SET(VERBOSE) THEN BEGIN
+			WINDOW,XSIZE=750*dataratio,YSIZE=750
+;			PLOT,INDGEN(nx),INDGEN(ny),POS=[0,0,1,1],XRANGE=[0,nx-1],YRANGE=[0,ny-1],/XS,/YS,/NODATA
+		ENDIF
+		IF KEYWORD_SET(WRITE_OVERLAP_DETECT) THEN BEGIN
+      IF ~KEYWORD_SET(WRITE_INPLACE) THEN overlap_mask_cube = BYTARR(nx,ny,nt)
+			outputfilename='./overlap_mask_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
+                      FILE_BASENAME(sum_cube)
+    ENDIF
+		FOR t=0,nt-1 DO BEGIN
+			mask = BYTARR(nx,ny)
+			FOR j=0,(*results[t]).ndetect-1 DO mask[(*(*results[t]).structs[j]).pos] = 1
+			IF KEYWORD_SET(VERBOSE) THEN BEGIN
+;				TVSCL,CONGRID(summed_cube[*,*,t],750,750)
+				TV,CONGRID(BYTSCL(LP_GET(sum_cube,t),/NAN),750*dataratio,750)
+				LOADCT,13,/SILENT
+				CONTOUR,CONGRID(mask,750*dataratio,750),COLOR=255, LEVELS = 1, /ISOTROPIC, $
+;        XRANGE=[0,nx-1],YRANGE=[0,ny-1],
+        XS=13,YS=13,POSITION=[0,0,1,1],/NORMAL,/NOERASE
+        IF (N_ELEMENTS(COMPARISON_MASK) EQ 1) THEN $
+          CONTOUR,REFORM(LP_GET(comparison_mask,t)), COLOR=200, LEVELS=1, /ISO, XS=13, YS=13, $
+                  POS=[0,0,1,1], /NORMAL, /NOERASE
+				LOADCT,0,/SILENT
+				FOR j=0,(*results[t]).ndetect-1 DO BEGIN
+					xyout_pos = ARRAY_INDICES(mask,((*(*results[t]).structs[j]).pos)[0])+[-5,-20]
+;					XYOUTS,xyout_pos[0]/FLOAT(nx)*750.*dataratio,xyout_pos[1]/FLOAT(ny)*750.,STRTRIM((*(*results[t]).structs[j]).label,2), $
+					XYOUTS,xyout_pos[0]/FLOAT(nx),xyout_pos[1]/FLOAT(ny),STRTRIM((*(*results[t]).structs[j]).label,2), $
+          COLOR=255, /NORMAL, CHARSIZE=2
+				ENDFOR
+				XYOUTS,10.,10.,'All detections at t='+STRTRIM(t,2),/DATA,COLOR=255,CHARSIZE=2
+				WAIT,0.05
+			ENDIF
+			IF KEYWORD_SET(WRITE_OVERLAP_DETECT) THEN BEGIN
+        IF KEYWORD_SET(WRITE_INPLACE) THEN BEGIN
+          LP_PUT, mask, outputfilename, t, nt=nt, KEEP_OPEN=(t NE nt-1) 
+          IF (t EQ nt-1) THEN PRINT,'Written: '+outputfilename
+        ENDIF ELSE $
+          overlap_mask_cube[*,*,t] = mask
+      ENDIF
+		ENDFOR
+		IF (KEYWORD_SET(WRITE_OVERLAP_DETECT) AND ~KEYWORD_SET(WRITE_INPLACE)) THEN BEGIN
+			LP_WRITE,overlap_mask_cube,outputfilename
+			PRINT,'Written: '+outputfilename
+		ENDIF
+	ENDIF
+	IF (verbose EQ 2) THEN STOP
+
+  IF (N_ELEMENTS(LIMIT_GROUP_SEARCH) EQ 1) THEN BEGIN
+		FOR t=0L,nt-1 DO BEGIN												; Loop over all time steps
+			  FOR j=0,(*results[t]).ndetect-1 DO BEGIN								; Loop over all detections at each time step
+				  IF ((*(*results[t]).structs[j]).label EQ 11166) THEN t_first = t ; If the detection label equals the current detection counter
+        ENDFOR
+      ENDFOR
+;    stop
+  ENDIF
+
+	; Group detections by label
+	detections = PTRARR(detect_counter,/ALLOCATE_HEAP)
+	sel_detect_idx = -1
+	t0 = SYSTIME(/SECONDS)
+  lifetime_max = 0L
+	FOR d=0L,detect_counter-1 DO BEGIN											; Loop over all single detections
+		t_arr = -1
+		j_arr = -1
+    label_check = d+1L
+    IF (N_ELEMENTS(LIMIT_GROUP_SEARCH) EQ 1) THEN BEGIN
+      ; Find first occurrence of current detection counter
+      t_first = -1L
+      t=0L
+      WHILE (t_first EQ -1) DO BEGIN
+			  FOR j=0,(*results[t]).ndetect-1 DO BEGIN								; Loop over all detections at each time step
+;				  IF (label_check EQ (*(*results[t]).structs[j]).label) THEN t_first = t ; If the detection label equals the current detection counter
+				  IF ((*(*results[t]).structs[j]).label EQ label_check) THEN t_first = t ; If the detection label equals the current detection counter
+        ENDFOR
+        t += 1L
+;        IF (t EQ nt-1) THEN BEGIN
+;          t_first = t_first_last
+;          PRINT,'Hmmm....'
+;          STOP
+;        ENDIF
+      ENDWHILE
+      t_first_last = t_first
+      t_low = t_first - LONG(limit_group_search/2.)
+      IF (t_low LT 0) THEN BEGIN
+        t_low = 0L
+        t_upp = LONG(limit_group_search)
+      ENDIF ELSE BEGIN
+        t_upp = t_first + LONG(limit_group_search/2.)
+        IF (t_upp GT (nt-1)) THEN BEGIN
+          t_upp = LONG(nt)-1L
+          t_low = t_upp - LONG(limit_group_search)
+        ENDIF
+      ENDELSE
+    ENDIF ELSE BEGIN
+      t_low = 0L
+      t_upp = LONG(nt)-1L
+    ENDELSE
+		FOR t=t_low,t_upp DO BEGIN												; Loop over all time steps
+			FOR j=0,(*results[t]).ndetect-1 DO BEGIN								; Loop over all detections at each time step
+;				IF (label_check EQ (*(*results[t]).structs[j]).label) THEN BEGIN					; If the detection label equals the current detection counter
+				IF ((*(*results[t]).structs[j]).label EQ label_check) THEN BEGIN					; If the detection label equals the current detection counter
+;					print,label_check,t,j,(*(*results[t]).structs[j]).label
+					IF (TOTAL(t_arr) EQ -1) THEN t_arr = t ELSE t_arr = [t_arr,t]				; - Add the time step to the time step array
+					IF (TOTAL(j_arr) EQ -1) THEN j_arr = j ELSE j_arr = [j_arr,j]				; - Add the detection number for that time step to an array
+;					*det[j] = CREATE_STRUCT('pos',(*(*results[t]).structs[j]).pos)
+;					IF (d NE 0) THEN t_comp = (*detections[d-1]).t ELSE t_comp = -1
+;					IF (TOTAL(t_comp) EQ -1) THEN t_arr = t ELSE t_arr = [(*detections[d-1]).t,t]
+;					*detections[d] = CREATE_STRUCT('label',(*(*results[t]).structs[j]).label,'t',t_arr);,'det',det)
+				ENDIF
+			ENDFOR
+		ENDFOR
+;    IF (TOTAL(t_arr) EQ -1) THEN BEGIN
+;      PRINT,'Hmm.... t_arr EQ -1...'
+;      stop
+;    ENDIF
+		nt_arr = N_ELEMENTS(t_arr)
+		lifetime = t_arr[nt_arr-1] - t_arr[0] + 1									; Determine lifetime
+    IF (lifetime GT lifetime_max) THEN lifetime_max = lifetime
+		; Checking lifetime constraint
+		IF ((lifetime GE min_lifetime) AND (lifetime LE max_lifetime)) THEN BEGIN									; If the detections lifetime >= lifetime constraint
+			IF (TOTAL(sel_detect_idx) EQ -1) THEN sel_detect_idx = d ELSE sel_detect_idx = [sel_detect_idx,d]	; Add the detection label to the array of selected detections
+      extra = 'Selected:    '
+		ENDIF ELSE extra = 'Not selected:'
+		det = PTRARR(nt_arr,/ALLOCATE_HEAP)
+		FOR tt=0L,nt_arr-1 DO BEGIN											; Loop over all time steps where detection is present
+			*det[tt] = CREATE_STRUCT('pos',(*(*results[t_arr[tt]]).structs[j_arr[tt]]).pos)
+		ENDFOR
+		*detections[d] = CREATE_STRUCT('label',label_check,'t',t_arr,'lifetime',lifetime,'det',det)				; Write results grouped by detection with lifetime information
+		PROCESS_TIMER, label_check, detect_counter, t0, EXTRA=extra+' d='+STRTRIM(d,2)+', nt='+$
+      STRTRIM(nt_arr,2)+', t_upp='+STRTRIM(t_arr[nt_arr-1],2)+', t_low='+STRTRIM(t_arr[0],2)+$
+      ', t='+STRTRIM(lifetime,2)+'. So far t_max='+STRTRIM(lifetime_max,2)
+	ENDFOR
+  PRINT,''
+	PRINT,'sel_detect_idx: ',sel_detect_idx
+	PRINT,'Final number of detections after lifetime constraint: '+STRTRIM(N_ELEMENTS(sel_detect_idx),2)
+	IF (verbose EQ 2) THEN STOP
+	
+	; Applying lifetime constraint
+	nsel_detections_orig = N_ELEMENTS(sel_detect_idx)
+  nremove_detections = N_ELEMENTS(REMOVE_DETECTIONS)
+  nsel_detections = nsel_detections_orig - nremove_detections
+	sel_detections = PTRARR(nsel_detections,/ALLOCATE_HEAP)
+	sel_detect_mask = BYTARR(nx,ny,nt)
+	IF KEYWORD_SET(VERBOSE) THEN BEGIN
+		WINDOW,XSIZE=750*dataratio,YSIZE=750
+		PLOT,INDGEN(nx),INDGEN(ny),POS=[0,0,1,1],XRANGE=[0,nx-1],YRANGE=[0,ny-1],/XS,/YS,/NODATA
+	ENDIF
+  ; Create final selection of detections based on lifetime constraints
+  detpass = 0L
+  IF KEYWORD_SET(GET_KERNELS) THEN BEGIN
+    totnkernellabels = 0L
+    totnkernels = 0L
+    sel_kernel_mask = BYTARR(nx,ny,nt)
+    last_kernel_detect_counter = 0L
+    sum_kernel_detect_counter = 0L
+  ENDIF
+	FOR dd=0L,nsel_detections_orig-1 DO BEGIN											
+    detlabel = (*detections[sel_detect_idx[dd]]).label
+    print,dd,detpass,detlabel
+    ; Compare the detection label with those of the detections to be removed
+    IF (nremove_detections GE 1) THEN whereremove = WHERE(remove_detections EQ detlabel) $
+      ELSE whereremove = -1
+    IF (whereremove EQ -1) THEN BEGIN
+      ; If detection is not to be removed, continue selecting
+  		*sel_detections[detpass] = *detections[sel_detect_idx[dd]]				
+;  		IF KEYWORD_SET(VERBOSE) THEN $
+;        PRINT,detpass,N_ELEMENTS(UNIQ((*sel_detections[detpass]).t))-N_ELEMENTS((*sel_detections[detpass]).t)
+;  		PRINT,N_ELEMENTS((*sel_detections[detpass]).t)
+  		nt_loc = N_ELEMENTS((*sel_detections[detpass]).t)
+      IF KEYWORD_SET(GET_KERNELS) THEN kernelresults = PTRARR(nt_loc,/ALLOCATE_HEAP)
+  		FOR tt=0,nt_loc-1 DO BEGIN 
+        t_real = ((*sel_detections[detpass]).t)[tt]
+;        detectionpos = (*(*sel_detections[detpass]).det[tt]).pos
+	  		mask = BYTARR(nx,ny)
+	  		mask[(*(*sel_detections[detpass]).det[tt]).pos] = 1B
+	  		sel_detect_mask[*,*,((*sel_detections[detpass]).t)[tt]] += mask
+        ; Check for kernel pixels within the detection
+        IF KEYWORD_SET(GET_KERNELS) THEN BEGIN
+    			IF KEYWORD_SET(PAD) THEN BEGIN
+            kernel_mask = BYTARR(nx+2,ny+2) 
+            loc_detmask = BYTARR(nx+2,ny+2)
+            loc_detmask[1:nx,1:ny] = mask
+          ENDIF ELSE BEGIN
+    			  kernel_mask = BYTARR(nx,ny)
+            loc_detmask = mask
+          ENDELSE
+          loc_detpos = WHERE(mask EQ 1)
+  			  nkernels = 0L
+				  discard_kernelpix = -1                            ; Pixel coordinates to be discarded, init val
+          tmp_mask = mask_cube[*,*,t_real]     ; mask_cubes contains mask with 1s & 2s (=kernels)
+          IF KEYWORD_SET(PAD) THEN BEGIN
+            tmp_pad_mask = BYTARR(nx+2,ny+2)
+            tmp_pad_mask[1:nx,1:ny] = tmp_mask
+          ENDIF ELSE tmp_pad_mask = tmp_mask
+          loc_detpos_pad = WHERE(loc_detmask EQ 1)
+          wherekernelpix = loc_detpos_pad[WHERE(tmp_pad_mask[loc_detpos_pad] EQ 2,nwherekernel)]
+          FOR kk=0,nwherekernel-1 DO BEGIN
+            ; If the considered pixel is not a discarded pixel, begin growing region
+  					IF (TOTAL(discard_kernelpix EQ wherekernelpix[kk]) LE 0) THEN BEGIN					
+              IF (nwherekernel GT 1) THEN BEGIN
+                ; Grow the region of selected pixels touching the selected pixel
+    		        kernelpix = REGION_GROW(tmp_pad_mask,wherekernelpix[kk],/ALL,THRESH=2)	
+              ENDIF ELSE kernelpix = wherekernelpix[kk]
+  						nkernelpix = N_ELEMENTS(kernelpix)
+      					IF (nkernelpix NE 1) THEN $       ; Added check for limb-to-limb
+                  discard_kernelpix = kernelpix[1:nkernelpix-1] $
+                ELSE $
+                  discard_kernelpix = -1
+  ;							discard_pix = kernelpix[1:nkernelpix-1]
+  							kernel_mask[kernelpix] = 1B						; Add the region to the mask
+                sel_kernel_mask[*,*,t_real] += kernel_mask[1:nx,1:ny]
+  							nkernels += 1L
+  							totnkernels += 1L
+  					ENDIF
+          ENDFOR
+  				IF (TOTAL(WHERE(kernel_mask GT 0)) NE -1) THEN BEGIN
+            ; Pad kernel_mask
+  					kernellabels = LABEL_REGION(kernel_mask,/ALL_NEIGHBORS)								; Label the pixels of all regions
+            IF KEYWORD_SET(PAD) THEN BEGIN
+              kernellabels = kernellabels[1:nx,1:ny]                  ; New because of padding
+  ;            tmp_mask = pad_mask[1:nx,1:ny]
+            ENDIF
+  					nkernellabels = MAX(kernellabels,/NAN)
+  					nkernellabels_pix = N_ELEMENTS(WHERE(kernellabels GT 0))							
+  					nkernel_pix = N_ELEMENTS(WHERE(kernel_mask GT 0))
+  					IF (nkernel_pix NE nkernellabels_pix) THEN BEGIN							
+              ; If number of structure pixels != the number of label pixels, stop with error
+  						PRINT,'Something is very wrong here... '+STRTRIM(nkernel_pix,2)+' NE '+STRTRIM(nkernellabels_pix,2)
+  						STOP
+  					ENDIF ELSE BEGIN										
+              ; If nlabel_pix = nkernels_pix, then start writing results
+  						kernellabel_vals = LINDGEN(nkernellabels)+1
+  						kernels = PTRARR(nkernellabels,/ALLOCATE_HEAP)
+  						kernels = PTRARR(nkernels,/ALLOCATE_HEAP)
+              ; Loop over all labels
+  						FOR j=0,nkernellabels-1 DO BEGIN								
+                ; Select the pixels corresponding to current label
+  							kernelpositions = WHERE(kernellabels EQ kernellabel_vals[j])					
+                ; Write results to pointer
+  							  *kernels[j] = CREATE_STRUCT('label',kernellabel_vals[j]+totnkernellabels,$
+                                  'pos',kernelpositions)
+  						ENDFOR
+  					ENDELSE
+  				ENDIF ELSE BEGIN
+  					nkernellabels = 0
+  					kernels = 0
+  				ENDELSE
+  				totnkernellabels += nkernellabels
+          *kernelresults[tt] = CREATE_STRUCT('t',t_real,'nkernels',nkernellabels,'kernels',kernels)					
+        ENDIF
+	  	ENDFOR
+      IF KEYWORD_SET(GET_KERNELS) THEN BEGIN
+      	pass = 0L
+      	totpasses = 0L
+      	tt = 0
+      	kernel_first_detect = 0
+        IF (dd EQ 0) THEN BEGIN
+        	WHILE (kernel_first_detect EQ 0) DO BEGIN
+        		IF ((*kernelresults[tt]).nkernels GT 0) THEN BEGIN
+        			kernel_detect_counter = LONG((*(*kernelresults[tt]).kernels[$
+                                          (*kernelresults[tt]).nkernels-1]).label)
+        			kernel_first_detect = 1
+        		ENDIF
+        		tt += 1
+        	ENDWHILE
+        ENDIF
+        t0 = SYSTIME(/SECONDS)
+      	FOR t=0L,nt_loc-1 DO BEGIN													
+          ; Loop over all detections at the current time step
+      		FOR j=0,(*kernelresults[t]).nkernels-1 DO BEGIN									
+      			pass += 1L
+            ; If the label of the current detection is bigger than the detection counter
+      			IF ((*(*kernelresults[t]).kernels[j]).label GT kernel_detect_counter) THEN BEGIN					
+              ; Increase the detection counter by 1
+      				kernel_detect_counter += 1L										
+              ; Relabel the current detection with the updated detection counter
+      				(*(*kernelresults[t]).kernels[j]).label = kernel_detect_counter						
+      			ENDIF
+      			orig_detection = (*(*kernelresults[t]).kernels[j]).pos
+      			;;; Check for splitting events ;;;
+      			kernel_overlapped = 0
+      			ncor = 0          ; number of detections with which there is overlap
+      			k_array = -1      ; kernel index array
+      			ncomarr = -1      ; array with number of common elements
+      			t_usel = t
+      			t_ubound = (t + t_skip_constraint) < (nt_loc-1)
+      			WHILE ((kernel_overlapped EQ 0) AND (t_usel LT t_ubound)) DO BEGIN
+      				IF (t_usel LT t_ubound) THEN t_usel += 1
+              ; Loop over all detections at the next time step
+      				FOR k=0,(*kernelresults[t_usel]).nkernels-1 DO BEGIN								
+      					comp_detection = (*(*kernelresults[t_usel]).kernels[k]).pos
+                ; Find the common elements between the considered detections
+      					ARRAY_COMPARE,orig_detection,comp_detection,/COMMON_ELEMENTS,COMMON_ARRAY=comarr,$
+                              NCOMMON_ARRAY=ncomarr_val		
+;      					position_label = ' (t,det_orig,t_comp,det_comp)=('+STRTRIM(t,2)+','+STRTRIM(j,2)+','+$
+;                                 STRTRIM(t_usel,2)+','+STRTRIM(k,2)+'). Single detections: '+$
+;                                 STRTRIM(detect_counter,2)+'.'
+                ; If the number of common elements >= overlap constraint
+      					IF ((N_ELEMENTS(comarr) GE overlap_constraint) AND (TOTAL(comarr) NE -1)) THEN BEGIN		
+      						IF (TOTAL(k_array) EQ -1) THEN k_array = k ELSE k_array = [k_array,k]
+      						IF (TOTAL(ncomarr) EQ -1) THEN ncomarr = ncomarr_val ELSE ncomarr = [ncomarr,ncomarr_val]
+      						kernel_overlapped = 1
+      						ncor += 1
+      					ENDIF
+      				ENDFOR
+      			ENDWHILE
+      			IF kernel_overlapped THEN BEGIN											; If overlap occurs, assign the labels
+              ; If there is more than one detection overlapping, find out which one has the max
+              ; overlap
+      				IF (ncor GT 1) THEN BEGIN
+      					wheremaxoverlap = WHERE(ncomarr EQ MAX(ncomarr,/NAN),COMPLEMENT=wherenotmaxoverlap,NCOMPLEMENT=nwherenotmaxoverlap)
+      					oldlabel = (*(*kernelresults[t_usel]).kernels[k_array[wheremaxoverlap[0]]]).label 
+      					(*(*kernelresults[t_usel]).kernels[k_array[wheremaxoverlap[0]]]).label = $
+                  (*(*kernelresults[t]).kernels[j]).label 		; Assign the next detection the current detection label
+;                extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
+;                  STRTRIM((*(*kernelresults[t_usel]).kernels[k_array[wheremaxoverlap[0]]]).label,2)+','+$
+;                  STRTRIM(ncomarr[0],2)
+      					FOR kk=0,nwherenotmaxoverlap-1 DO BEGIN
+      						oldlabel = (*(*kernelresults[t_usel]).kernels[k_array[wherenotmaxoverlap[kk]]]).label 
+      						kernel_detect_counter += 1L										; - Increase the detection counter by 1
+      						(*(*kernelresults[t_usel]).kernels[k_array[wherenotmaxoverlap[kk]]]).label = kernel_detect_counter 		; Assign the next detection the current detection label
+      					ENDFOR
+              ; If there is only one detection overlapping, assign that detection the current label
+      				ENDIF ELSE BEGIN
+      					oldlabel = (*(*kernelresults[t_usel]).kernels[k_array[0]]).label 
+      					(*(*kernelresults[t_usel]).kernels[k_array[0]]).label = $
+                  (*(*kernelresults[t]).kernels[j]).label 		; Assign the next detection the current detection label
+                extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
+                  STRTRIM((*(*kernelresults[t_usel]).kernels[k_array[0]]).label,2)+','+$
+                  STRTRIM(ncomarr[0],2)
+      				ENDELSE
+      			ENDIF ELSE $
+              extraout = 'No overlap: '+STRTRIM((*(*kernelresults[t]).kernels[j]).label,2)
+;      			ENDELSE
+            PROCESS_TIMER, t+1, nt_loc, t0, EXTRA=extraout
+      		ENDFOR
+      	ENDFOR
+;      	last_kernel_detect_counter = kernel_detect_counter
+;      	IF (verbose EQ 2) THEN STOP
+      	;;; Check for merging events ;;;
+      	IF KEYWORD_SET(MERGE_CHECK) THEN BEGIN
+;      		PRINT,'Status: Performing merge check...'
+      		pass = 0L
+      		totpasses = 0L
+;      		FOR t=0,nt-1 DO totpasses += LONG((*kernelresults[t]).nkernels)
+      		t0 = SYSTIME(/SECONDS)
+      		FOR t_dum=0,nt_loc-1 DO BEGIN													; Loop over all but the last time step
+      			t = nt_loc-t_dum-1
+      			FOR j=0,(*kernelresults[t]).nkernels-1 DO BEGIN									; Loop over all detections at the current time step
+      				pass += 1L
+      				orig_detection = (*(*kernelresults[t]).kernels[j]).pos
+      				kernel_overlapped = 0
+      				ncor = 0
+      				k_array = -1
+      				ncomarr = -1
+      				t_lsel = t
+      				t_lbound = (t - t_skip_constraint) > 0
+      				WHILE ((kernel_overlapped EQ 0) AND (t_lsel GT t_lbound)) DO BEGIN						; Check labels and overlap
+      					IF (t_lsel GT t_lbound) THEN t_lsel -= 1
+      					FOR k=0,(*kernelresults[t_lsel]).nkernels-1 DO BEGIN								; Loop over all detections at the next time step
+      						comp_detection = (*(*kernelresults[t_lsel]).kernels[k]).pos
+      						ARRAY_COMPARE,orig_detection,comp_detection,/COMMON_ELEMENTS,COMMON_ARRAY=comarr,NCOMMON_ARRAY=ncomarr_val		; Find the common elements between the considered detections
+;      						position_label = ' (t,det_orig,t_comp,det_comp)=('+STRTRIM(t,2)+','+STRTRIM(j,2)+','+STRTRIM(t_lsel,2)+','+STRTRIM(k,2)+'). Single detections: '+STRTRIM(detect_counter,2)+'.'
+      						IF ((N_ELEMENTS(comarr) GE overlap_constraint) AND (TOTAL(comarr) NE -1)) THEN BEGIN		; If the number of common elements >= overlap constraint
+      							IF (TOTAL(k_array) EQ -1) THEN k_array = k ELSE k_array = [k_array,k]
+      							IF (TOTAL(ncomarr) EQ -1) THEN ncomarr = ncomarr_val ELSE ncomarr = [ncomarr,ncomarr_val]
+      							kernel_overlapped = 1
+      							ncor += 1
+      						ENDIF
+      					ENDFOR
+      				ENDWHILE			
+      				IF kernel_overlapped THEN BEGIN										; If overlap occured, assign labels
+      					IF (ncor GT 1) THEN BEGIN
+      						wheremaxoverlap = WHERE(ncomarr EQ MAX(ncomarr,/NAN))
+      						oldlabel = (*(*kernelresults[t]).kernels[j]).label
+      						newlabel = (*(*kernelresults[t_lsel]).kernels[k_array[wheremaxoverlap[0]]]).label 
+;                  extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
+;                  STRTRIM(newlabel,2)+','+STRTRIM(ncomarr[wheremaxoverlap[0]],2)
+      						(*(*kernelresults[t]).kernels[j]).label = newlabel						;Assign the current detection the previous detection label
+      						FOR tt = t+1,nt_loc-1 DO BEGIN
+      							kk = 0
+      							newlabel_set = 0
+      							WHILE ((newlabel_set EQ 0) AND (kk LT (*kernelresults[tt]).nkernels-1)) DO BEGIN
+      								kk += 1	
+      								IF ((*(*kernelresults[tt]).kernels[kk]).label EQ oldlabel) THEN BEGIN
+      									(*(*kernelresults[tt]).kernels[kk]).label = newlabel
+      									newlabel_set = 1
+      								ENDIF
+      							ENDWHILE
+      						ENDFOR
+      					ENDIF
+      				ENDIF
+;              PROCESS_TIMER,t_dum+1,nt,t0,EXTRA=extraout
+      			ENDFOR
+      		ENDFOR
+      	ENDIF
+      ENDIF
+      detpass += 1
+    ENDIF ELSE BEGIN
+      PRINT,dd,detpass,' removed detection '+STRTRIM(detlabel,2)
+    ENDELSE
+    IF KEYWORD_SET(GET_KERNELS) THEN BEGIN
+    	; Group kernel detections by label
+      new_kernel_counter = kernel_detect_counter - last_kernel_detect_counter
+    	kernel_detections = PTRARR(new_kernel_counter,/ALLOCATE_HEAP)
+    	sel_kernel_detect_idx = -1
+    	t0 = SYSTIME(/SECONDS)
+      lifetime_max = 0L
+    	FOR d=0L,new_kernel_counter-1 DO BEGIN											; Loop over all single detections
+    		t_arr = -1
+        t_real_arr = -1
+    		j_arr = -1
+        label_check = d+1L+last_kernel_detect_counter
+    		FOR t=0,nt_loc-1 DO BEGIN												; Loop over all time steps
+    			FOR j=0,(*kernelresults[t]).nkernels-1 DO BEGIN								; Loop over all detections at each time step
+            ; If the detection label equals the current detection counter
+    				IF ((*(*kernelresults[t]).kernels[j]).label EQ label_check) THEN BEGIN					
+    					IF (TOTAL(t_arr) EQ -1) THEN BEGIN
+                t_real_arr = (*kernelresults[t]).t 
+                t_arr = t
+              ENDIF ELSE BEGIN
+                t_real_arr = [t_real_arr,(*kernelresults[t]).t]				; - Add the time step to the time step array
+                t_arr = [t_arr,t]
+              ENDELSE
+    					IF (TOTAL(j_arr) EQ -1) THEN $
+                j_arr = j $
+              ELSE $
+                j_arr = [j_arr,j]				; - Add the detection number for that time step to an array
+    				ENDIF
+    			ENDFOR
+    		ENDFOR
+;        IF (TOTAL(t_arr) EQ -1) THEN BEGIN
+;          PRINT,'Hmm.... t_arr EQ -1...'
+;          stop
+;        ENDIF
+    		nt_arr = N_ELEMENTS(t_real_arr)
+    		kernel_lifetime = t_real_arr[nt_arr-1] - t_real_arr[0] + 1									; Determine lifetime
+  ;  		; Checking lifetime constraint
+  ;  		IF (TOTAL(sel_kernel_detect_idx) EQ -1) THEN $
+  ;        sel_kernel_detect_idx = d $
+  ;      ELSE $
+  ;        sel_kernel_detect_idx = [sel_kernel_detect_idx,d]	; Add the detection label to the array of selected detections
+  ;      extra = 'Selected:    '
+    		kernel_det = PTRARR(nt_arr,/ALLOCATE_HEAP)
+    		FOR tt=0L,nt_arr-1 DO BEGIN											; Loop over all time steps where detection is present
+    			*kernel_det[tt] = CREATE_STRUCT('pos',(*(*kernelresults[t_arr[tt]]).kernels[j_arr[tt]]).pos)
+    		ENDFOR
+    		*kernel_detections[d] = CREATE_STRUCT('label',label_check,'t',t_real_arr,'lifetime',kernel_lifetime,$
+            'det',kernel_det)				; Write results grouped by detection with lifetime information
+  ;  		PROCESS_TIMER, label_check, detect_counter, t0, EXTRA=extra+' d='+STRTRIM(d,2)+', nt='+$
+  ;        STRTRIM(nt_arr,2)+', t_upp='+STRTRIM(t_arr[nt_arr-1],2)+', t_low='+STRTRIM(t_arr[0],2)+$
+  ;        ', t='+STRTRIM(lifetime,2)+'. So far t_max='+STRTRIM(lifetime_max,2)
+    	ENDFOR
+      ; Add kernel detections to selected detections
+  	  IF KEYWORD_SET(GET_KERNELS) THEN BEGIN
+        *sel_detections[dd] = CREATE_STRUCT(*sel_detections[dd], 'kernel_detections', $
+                kernel_detections)
+      ENDIF
+      last_kernel_detect_counter = kernel_detect_counter
+      sum_kernel_detect_counter += new_kernel_counter
+    ENDIF
+	ENDFOR
+	IF KEYWORD_SET(GET_KERNELS) THEN $
+     PRINT,'Final number of single kernel detections: '+STRTRIM(kernel_detect_counter,2)
+  replay = 0
+  replay_point:
+  off = [-5,-20]  ; Offset for label overlays
+	FOR t=0,nt-1 DO BEGIN													; Create mask from final selection of detections
+		IF KEYWORD_SET(VERBOSE) THEN BEGIN
+	    TV,CONGRID(BYTSCL(LP_GET(sum_cube,t),/NAN),750*dataratio,750)
+			LOADCT,13,/SILENT
+			CONTOUR,CONGRID(sel_detect_mask[*,*,t],750*dataratio,750),COLOR=255, LEVELS = 1, /ISOTROPIC, $;XRANGE=[0,nx-1],$
+;              YRANGE=[0,ny-1],
+              XS=13,YS=13,POSITION=[0,0,1,1], /NORMAL, /NOERASE
+      IF (N_ELEMENTS(COMPARISON_MASK) EQ 1) THEN $
+        CONTOUR,REFORM(LP_GET(comparison_mask,t)), COLOR=200, LEVELS=1, /ISO, XS=13, YS=13, $
+                POS=[0,0,1,1], /NORMAL, /NOERASE
+			LOADCT,0,/SILENT
+			FOR dd=0,nsel_detections-1 DO BEGIN
+				where_detect = WHERE((*sel_detections[dd]).t EQ t, nwhere_detect)
+;				where_idx = WHERE(sel_detect_idx EQ (*(*results[t]).structs[j]).label, nwhere_idx)
+				IF ((TOTAL(where_detect) NE -1) AND (nwhere_detect EQ 1)) THEN BEGIN
+					xyout_pos = ARRAY_INDICES(mask,((*(*sel_detections[dd]).det[where_detect[0]]).pos)[0])+off
+					XYOUTS,xyout_pos[0]/FLOAT(nx),xyout_pos[1]/FLOAT(ny),STRTRIM((*sel_detections[dd]).label,2),$
+            COLOR=255, /NORMAL, CHARSIZE=2
+				ENDIF
+			ENDFOR
+			XYOUTS,10.,10.,'Selected detections at t='+STRTRIM(t,2),/DATA,COLOR=255,CHARSIZE=2
+		ENDIF
+		IF (verbose EQ 2) THEN WAIT,0.5
+	ENDFOR
+	IF (verbose EQ 2) THEN STOP
+  IF (replay EQ 1) THEN GOTO,replay_point
+	IF KEYWORD_SET(WRITE_FINAL_MASK_CUBE) THEN BEGIN
+		outputfilename='./final_mask_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
+                      FILE_BASENAME(sum_cube)
+		LP_WRITE,sel_detect_mask, outputfilename
+		PRINT,'Written: '+outputfilename
+		outputfilename='./detect_eb_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
+                      FILE_BASENAME(sum_cube)+'_final.save'
+		SAVE,sel_detections,nsel_detections,filename=outputfilename
+		PRINT,'Written: '+outputfilename
+    IF KEYWORD_SET(GET_KERNELS) THEN BEGIN
+  		outputfilename='./final_kernelmask_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
+                        FILE_BASENAME(sum_cube)
+  		LP_WRITE,sel_kernel_mask, outputfilename
+  		PRINT,'Written: '+outputfilename
+    ENDIF
+	ENDIF
+
+
+  PRINT,'Detection statistics:'
+  PRINT,'# after intensity & size thresholds: '+STRTRIM(totnlabels,2)
+	PRINT,'# after continuity constraints:      '+STRTRIM(detect_counter,2)
+	PRINT,'# after lifetime constraint:         '+STRTRIM(N_ELEMENTS(sel_detect_idx),2)
+	IF KEYWORD_SET(GET_KERNELS) THEN $
+    PRINT,'# of kernels:                        '+STRTRIM(kernel_detect_counter,2)
+
+	IF (verbose EQ 2) THEN STOP
+;	IF KEYWORD_SET(WRITE_MASK_CUBE) THEN BEGIN
+;		LP_WRITE, mask_cube, './mask_'+FILE_BASENAME(inputfile)
+;		PRINT,'Written: ./mask_'+FILE_BASENAME(inputfile)
+;	ENDIF
+
+END
