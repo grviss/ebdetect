@@ -123,7 +123,7 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
           ; result array with the read-in value
           IF (N_ELEMENTS(parsed_line.value) NE $
               N_ELEMENTS(result.(wheretag))) THEN BEGIN
-            result = CRISPEX_TAG_DELETE(result, parsed_line.field)
+            result = EBDETECT_TAG_DELETE(result, parsed_line.field)
             result = CREATE_STRUCT(result, parsed_line.field, value)
           ENDIF ELSE $
             result.(wheretag) = value
