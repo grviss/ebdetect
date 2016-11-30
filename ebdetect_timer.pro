@@ -52,13 +52,13 @@ PRO EBDETECT_TIMER, pass, npass, t0, EXTRA_OUTPUT=extra_output, $
 	
 	IF (N_ELEMENTS(EXTRA_OUTPUT) NE 1) THEN extra_output = ''
   IF (N_ELEMENTS(CALLBY) NE 1) THEN $
-    callby = '  ' $
+    callby = '> ' $
   ELSE BEGIN
     IF (SIZE(CALLBY, /TYPE) NE 7) THEN BEGIN
       traceback = SCOPE_TRACEBACK(/STRUCTURE)
-      callby = '% '+traceback[N_ELEMENTS(traceback)-2].ROUTINE 
+      callby = '> '+traceback[N_ELEMENTS(traceback)-2].ROUTINE 
     ENDIF ELSE $
-      callby = '% '+STRUPCASE(callby)
+      callby = '> '+STRUPCASE(callby)
     callby += ': '
   ENDELSE
 
