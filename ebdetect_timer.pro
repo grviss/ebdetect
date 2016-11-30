@@ -9,7 +9,7 @@
 ;   Utilities, timer
 ;
 ; CALLING SEQUENCE:
-;   PROCESS_TIMER, pass, npass, t0
+;   EBDETECT_TIMER, pass, npass, t0
 ;
 ; INPUTS:
 ;   pass  - counter of passes through the loop
@@ -17,12 +17,15 @@
 ;   t0    - reference time in seconds, i.e., time before starting the loop
 ;
 ; KEYWORD PARAMETERS:
-;   EXTRA_OUTPUT  - formatted string to be appended to the PROCESS_TIMER output
-;   CALLBY        - scalar string specifying the procedure/function name calling PROCESS_TIMER.
+;   EXTRA_OUTPUT  - formatted string to be appended to the EBDETECT_TIMER output
+;   CALLBY        - scalar string specifying the procedure/function name calling
+;                   EBDETECT_TIMER, or set as flag (in which case EBDETECT_TIMER 
+;                   will find out by itself)
 ;
 ; OUTPUTS:
-;   String containing the current status of a process plus estimated time of completion, e.g.:
-;     
+;   String containing the current status of a process plus estimated time of
+;   completion, e.g.:
+;
 ;     Pass 3/300, or 1.000%. Running 00:00:02/00:03:20.
 ;
 ; RESTRICTIONS:
@@ -49,9 +52,15 @@ PRO EBDETECT_TIMER, pass, npass, t0, EXTRA_OUTPUT=extra_output, $
 	
 	IF (N_ELEMENTS(EXTRA_OUTPUT) NE 1) THEN extra_output = ''
   IF (N_ELEMENTS(CALLBY) NE 1) THEN $
-    callby = '' $
-  ELSE $
-    callby = STRUPCASE(callby)+': '
+    callby = '  ' $
+  ELSE BEGIN
+    IF (SIZE(CALLBY, /TYPE) NE 7) THEN BEGIN
+      traceback = SCOPE_TRACEBACK(/STRUCTURE)
+      callby = '% '+traceback[N_ELEMENTS(traceback)-2].ROUTINE 
+    ENDIF ELSE $
+      callby = '% '+STRUPCASE(callby)
+    callby += ': '
+  ENDELSE
 
 	timer_t = SYSTIME(/SECONDS)                             ; Determine current time in seconds
 	accumsectime = (timer_t-t0)                             ; Determine accumulated time in seconds
