@@ -186,12 +186,10 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
             ELSE $
               tmp_mean_summed_cube = [(LP_GET(sum_cube,tt))[selpix]]
           ENDFOR
-          running_mean_summed_cube[t] = MEAN(tmp_mean_summed_cube,DOUBLE=KEYWORD_SET(DOUBLE_SET),/NAN)
+          running_mean_summed_cube[t] = MEAN(tmp_mean_summed_cube, /DOUBLE ,/NAN)
           IF ~KEYWORD_SET(FACTOR_SIGMA) THEN BEGIN
-            IF KEYWORD_SET(DOUBLE_SET) THEN $
-      		    running_sdev[t] = STDDEV(DOUBLE(tmp_mean_summed_cube),/NAN) $                       ; Determine the standard deviation in the cube
-            ELSE $
-      		    running_sdev[t] = STDDEV(tmp_mean_summed_cube,/NAN)                        ; Determine the standard deviation in the cube
+            ; Determine the standard deviation in the cube
+    		    running_sdev[t] = STDDEV(DOUBLE(tmp_mean_summed_cube),/NAN) 
           ENDIF
           PROCESS_TIMER,t+1,nt,t0, EXTRA_OUTPUT='Determining running mean...'
         ENDFOR
@@ -233,12 +231,11 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       ENDIF ELSE $
         sel_summed_cube = summed_cube
       IF ~KEYWORD_SET(FACTOR_SIGMA) THEN BEGIN
-        IF KEYWORD_SET(DOUBLE_SET) THEN $
-  		    sdev = STDDEV(DOUBLE(sel_summed_cube),/NAN) $                       ; Determine the standard deviation in the cube
-        ELSE $
-  		    sdev = STDDEV(sel_summed_cube,/NAN)                        ; Determine the standard deviation in the cube
+        ; Determine the standard deviation in the cube
+  		  sdev = STDDEV(DOUBLE(sel_summed_cube),/NAN) 
       ENDIF
-  		mean_summed_cube = MEAN(sel_summed_cube,DOUBLE=KEYWORD_SET(DOUBLE_SET),/NAN)             ; Determine the average of the cube
+      ; Determine the average of the cube
+  		mean_summed_cube = MEAN(sel_summed_cube, /DOUBLE,/NAN)             
     ENDELSE
     ; Determine line center constraints if any given
     IF (N_ELEMENTS(lc_sigma) EQ 1) THEN BEGIN
@@ -269,8 +266,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
         ENDELSE
       ENDIF ELSE $
         sel_lc_summed_cube = lc_summed_cube
-      sdev_lc_cube = STDDEV(sel_lc_summed_cube, DOUBLE=KEYWORD_SET(DOUBLE_SET), /NAN)
-      mean_lc_cube = MEAN(sel_lc_summed_cube,DOUBLE=KEYWORD_SET(DOUBLE_SET), /NAN)
+      sdev_lc_cube = STDDEV(sel_lc_summed_cube, /DOUBLE, /NAN)
+      mean_lc_cube = MEAN(sel_lc_summed_cube, /DOUBLE, /NAN)
       print,mean_lc_cube,sdev_lc_cube
     ENDIF
 		mask_cube = BYTARR(nx,ny,nt)                     ; Define empty mask cube
