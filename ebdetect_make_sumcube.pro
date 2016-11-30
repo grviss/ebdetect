@@ -97,8 +97,9 @@ PRO EBDETECT_MAKE_SUMCUBE, inputfile, sum_positions, NLP=nlp, NS=ns, SET_NS=set_
 		FOR lp=0,N_ELEMENTS(sum_positions)-1 DO BEGIN
       tmp_im += FLOAT(readfile[t*nlp*ns+sum_positions[lp]*ns+set_ns])
 			pass += 1
-			PROCESS_TIMER, pass, npass, t0, EXTRA_OUTPUT='(t,lp,s)=('+STRTRIM(t,2)+','+$
-                     STRTRIM(sum_positions[lp],2)+','+STRTRIM(set_ns,2)+').'
+			EBDETECT_TIMER, pass, npass, t0, EXTRA_OUTPUT='(t,lp,s)=('+STRTRIM(t,2)+','+$
+                     STRTRIM(sum_positions[lp],2)+','+STRTRIM(set_ns,2)+').', $
+                     /CALLBY
 		ENDFOR
 	  tmp_im /= FLOAT(N_ELEMENTS(sum_positions))
     IF KEYWORD_SET(WRITE_INPLACE) THEN $
