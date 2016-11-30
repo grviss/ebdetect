@@ -64,7 +64,7 @@ PRO EBDETECT_MAKE_SUMCUBE, inputfile, sum_positions, NLP=nlp, NS=ns, SET_NS=set_
 	IF (N_ELEMENTS(NLP) NE 1) THEN nlp = 2
 	IF (N_ELEMENTS(NS) NE 1) THEN ns = 1
 	IF (N_ELEMENTS(SET_NS) NE 1) THEN set_ns = 0
-	IF (N_ELEMENTS(SUM_POSITIONS) LT 2) THEN sum_positions = INDGEN(nlp)
+	IF (N_ELEMENTS(SUM_POSITIONS) LT 1) THEN sum_positions = INDGEN(nlp)
   IF KEYWORD_SET(FITS) THEN BEGIN
     offset = CRISPEX_FITSPOINTER(inputfile, EXTEN_NO=0, header, /SILENT)
     nx = SXPAR(header, 'NAXIS1')
@@ -111,7 +111,7 @@ PRO EBDETECT_MAKE_SUMCUBE, inputfile, sum_positions, NLP=nlp, NS=ns, SET_NS=set_
 ;	summed_cube /= FLOAT(N_ELEMENTS(sum_positions))
   IF ~KEYWORD_SET(WRITE_INPLACE) THEN $
   	LP_WRITE, summed_cube, outdir+outputfilename
-	MESSAGE,'Written: '+outputfilename, /INFO
+	EBDETECT_FEEDBACK, /STATUS, 'Written: '+outputfilename
   
   FREE_LUN, lun
 
