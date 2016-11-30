@@ -41,7 +41,7 @@
 ;
 ; RESTRICTIONS:
 ;   Requires the following procedures and functions:
-;   Procedures: LP_HEADER, LP_WRITE, MK_SUMMED_CUBE, PROCESS_TIMER
+;   Procedures: LP_HEADER, LP_WRITE, EBDETECT_MAKE_SUMCUBE, EBDETECT_TIMER
 ;   Functions:  EBDETECT_INITIALIZE(), LP_GET()
 ;
 ; PROCEDURE:
@@ -191,7 +191,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
             ; Determine the standard deviation in the cube
     		    running_sdev[t] = STDDEV(DOUBLE(tmp_mean_summed_cube),/NAN) 
           ENDIF
-          PROCESS_TIMER,t+1,nt,t0, EXTRA_OUTPUT='Determining running mean...'
+          EBDETECT_TIMER,t+1,nt,t0, EXTRA_OUTPUT='Determining running mean...'
         ENDFOR
         PRINT,'done!'
   			outputfilename='detect_eb_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
@@ -206,7 +206,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
         t0 = SYSTIME(/SECONDS)
         FOR t=0,nt-1 DO BEGIN
           summed_cube[*,*,t] = LP_GET(sum_cube,t)
-          PROCESS_TIMER,t+1,nt,t0,EXTRA_OUTPUT='Getting summed wing cube in memory...'
+          EBDETECT_TIMER,t+1,nt,t0,EXTRA_OUTPUT='Getting summed wing cube in memory...'
         ENDFOR
         PRINT,'done!'
       ENDIF
@@ -224,7 +224,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
               ELSE $
                 sel_summed_cube = [sel_summed_cube, (LP_GET(sum_cube,t))[selpix]]
             ENDIF
-            PROCESS_TIMER,t+1,nt,t0, EXTRA_OUTPUT='Determining selected summed wing cube pixels...'
+            EBDETECT_TIMER,t+1,nt,t0, EXTRA_OUTPUT='Determining selected summed wing cube pixels...'
           ENDFOR            
           PRINT,'done!'
         ENDELSE
@@ -259,7 +259,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
               ELSE $
                 sel_lc_summed_cube = [sel_lc_summed_cube, (LP_GET(lc_sum_cube,t))[lc_selpix]]
             ENDIF
-            PROCESS_TIMER,t+1,nt,t0, $
+            EBDETECT_TIMER,t+1,nt,t0, $
               EXTRA_OUTPUT='Determining selected summed line center cube pixels...'
           ENDFOR
           PRINT,'done!'
@@ -452,7 +452,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 ;      ELSE $
 ;			  *results[t] = CREATE_STRUCT('t',t,'ndetect',nlabels,'structs',structs,'kernels',kernels)
 			pass += 1L
-			PROCESS_TIMER, pass, nt, t0, EXTRA_OUTPUT=' Pixels detected: '+STRTRIM(nwheregt1,2)+'+'+$
+			EBDETECT_TIMER, pass, nt, t0, EXTRA_OUTPUT=' Pixels detected: '+STRTRIM(nwheregt1,2)+'+'+$
                     STRTRIM(nwheregt0,2)+'/'+STRTRIM(totalpixels,2)+$
                    '. Detected structures: '+STRTRIM(nlabels,2)+'/'+STRTRIM(totnlabels,2)+'.'
 		ENDFOR
@@ -554,7 +554,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
         extraout = 'No overlap: '+STRTRIM((*(*results[t]).structs[j]).label,2)
 ;				PRINT,t,(*(*results[t]).structs[j]).label
 			ENDELSE
-      PROCESS_TIMER, t+1, nt, t0, EXTRA=extraout
+      EBDETECT_TIMER, t+1, nt, t0, EXTRA=extraout
 		ENDFOR
 	ENDFOR
 	last_detect_counter = detect_counter
@@ -597,7 +597,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 							overlapped = 1
 							ncor += 1
 						ENDIF
-;						PROCESS_TIMER, pass, totpasses, t0, EXTRA_OUTPUT=position_label
+;						EBDETECT_TIMER, pass, totpasses, t0, EXTRA_OUTPUT=position_label
 					ENDFOR
 				ENDWHILE			
 				IF overlapped THEN BEGIN										; If overlap occured, assign labels
@@ -623,7 +623,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 						ENDFOR
 					ENDIF
 				ENDIF
-        PROCESS_TIMER,t_dum+1,nt,t0,EXTRA=extraout
+        EBDETECT_TIMER,t_dum+1,nt,t0,EXTRA=extraout
 			ENDFOR
 		ENDFOR
 	ENDIF
@@ -773,7 +773,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 			*det[tt] = CREATE_STRUCT('pos',(*(*results[t_arr[tt]]).structs[j_arr[tt]]).pos)
 		ENDFOR
 		*detections[d] = CREATE_STRUCT('label',label_check,'t',t_arr,'lifetime',lifetime,'det',det)				; Write results grouped by detection with lifetime information
-		PROCESS_TIMER, label_check, detect_counter, t0, EXTRA=extra+' d='+STRTRIM(d,2)+', nt='+$
+		EBDETECT_TIMER, label_check, detect_counter, t0, EXTRA=extra+' d='+STRTRIM(d,2)+', nt='+$
       STRTRIM(nt_arr,2)+', t_upp='+STRTRIM(t_arr[nt_arr-1],2)+', t_low='+STRTRIM(t_arr[0],2)+$
       ', t='+STRTRIM(lifetime,2)+'. So far t_max='+STRTRIM(lifetime_max,2)
 	ENDFOR
@@ -969,7 +969,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       			ENDIF ELSE $
               extraout = 'No overlap: '+STRTRIM((*(*kernelresults[t]).kernels[j]).label,2)
 ;      			ENDELSE
-            PROCESS_TIMER, t+1, nt_loc, t0, EXTRA=extraout
+            EBDETECT_TIMER, t+1, nt_loc, t0, EXTRA=extraout
       		ENDFOR
       	ENDFOR
 ;      	last_kernel_detect_counter = kernel_detect_counter
@@ -1027,7 +1027,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       						ENDFOR
       					ENDIF
       				ENDIF
-;              PROCESS_TIMER,t_dum+1,nt,t0,EXTRA=extraout
+;              EBDETECT_TIMER,t_dum+1,nt,t0,EXTRA=extraout
       			ENDFOR
       		ENDFOR
       	ENDIF
@@ -1084,7 +1084,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     		ENDFOR
     		*kernel_detections[d] = CREATE_STRUCT('label',label_check,'t',t_real_arr,'lifetime',kernel_lifetime,$
             'det',kernel_det)				; Write results grouped by detection with lifetime information
-  ;  		PROCESS_TIMER, label_check, detect_counter, t0, EXTRA=extra+' d='+STRTRIM(d,2)+', nt='+$
+  ;  		EBDETECT_TIMER, label_check, detect_counter, t0, EXTRA=extra+' d='+STRTRIM(d,2)+', nt='+$
   ;        STRTRIM(nt_arr,2)+', t_upp='+STRTRIM(t_arr[nt_arr-1],2)+', t_low='+STRTRIM(t_arr[0],2)+$
   ;        ', t='+STRTRIM(lifetime,2)+'. So far t_max='+STRTRIM(lifetime_max,2)
     	ENDFOR
