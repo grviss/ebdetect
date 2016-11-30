@@ -80,26 +80,31 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     params.inputdir += PATH_SEP()
   IF (STRMID(params.outputdir,0,1,/REVERSE) NE PATH_SEP()) THEN $
     params.outputdir += PATH_SEP()
+  inputfile_exists = 0
+  wsum_cube_exists = 0
+  lcsum_cube_exists= 0
   IF (params.inputfile NE '') THEN BEGIN
-    inputfile_exists = FILE_TEST(params.inputdir+params.inputfile)
-    IF inputfile_exists THEN BEGIN
-    	LP_HEADER,params.inputfile, NX=nx, NY=ny, NT=imnt 
-  	  nt = imnt/params.nlp
+    IF (params.sum_cube EQ 0) THEN BEGIN
+      inputfile_exists = FILE_TEST(params.inputdir+params.inputfile)
+      IF inputfile_exists THEN BEGIN
+      	LP_HEADER,params.inputdir+params.inputfile, NX=nx, NY=ny, NT=imnt 
+    	  nt = imnt/params.nlp
+      ENDIF ELSE BEGIN
+        EBDETECT_FEEDBACK, /ERROR, /TERMINATE, $
+          'No inputfile '+params.inputfile+' exists in directory '+$
+          params.inputdir
+        RETURN 
+      ENDELSE
     ENDIF ELSE BEGIN
-      EBDETECT_FEEDBACK, /ERROR, /TERMINATE, $
-        'No inputfile '+params.inputfile+' exists in directory '+$
-        params.inputdir
-      RETURN 
-    ENDELSE
-  ENDIF ELSE IF (params.sum_cube NE '') THEN BEGIN
-    sum_cube_exists = FILE_TEST(params.inputdir + params.sum_cube)
-    IF sum_cube_exists THEN $
-      LP_HEADER, params.sum_cube, NX=nx, NY=ny, NT=nt  $
-    ELSE BEGIN
-      EBDETECT_FEEDBACK, /ERROR, /TERMINATE, $
-        'No inputfile '+params.sum_cube+' exists in directory '+$
-        params.inputdir
-      RETURN 
+      wsum_cube_exists = FILE_TEST(params.inputdir + params.sum_cube)
+      IF wsum_cube_exists THEN $
+        LP_HEADER, params.inputdir+params.sum_cube, NX=nx, NY=ny, NT=nt  $
+      ELSE BEGIN
+        EBDETECT_FEEDBACK, /ERROR, /TERMINATE, $
+          'No inputfile '+params.sum_cube+' exists in directory '+$
+          params.inputdir
+        RETURN 
+      ENDELSE
     ENDELSE
   ENDIF ELSE BEGIN
     EBDETECT_FEEDBACK, /ERROR, /TERMINATE, $
@@ -107,9 +112,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       ' Please check your input in '+ConfigFile+'.'
     RETURN
   ENDELSE
-  lcsum_cube_exist = 0
   IF (params.lcsum_cube NE '') THEN $
-    lcsum_cube_exist = FILE_TEST(params.inputdir + params.lcsum_cube)
+    lcsum_cube_exists = FILE_TEST(params.inputdir + params.lcsum_cube)
   params.nx = nx
   params.ny = ny
   params.nt = nt
@@ -117,7 +121,6 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   IF (N_ELEMENTS(params.sigma_constraint) GT 1) THEN $
     sigma_constraint = params.sigma_constraint[SORT(params.sigma_constraint)]
   nlevels = N_ELEMENTS(sigma_constraint)
-  nlcsum_pos = N_ELEMENTS(params.lcsum_pos)
   IF (N_ELEMENTS(params.lc_sigma) GT 1) THEN $
     lc_sigma = params.lc_sigma[SORT(params.lc_sigma)]
   ; Spatial thresholds
@@ -140,24 +143,25 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 
 ;============================================================================== 
   ; Create summed wing cube if multiple sum_positions are given
-	IF ((sum_cube_exists NE 1) AND (N_ELEMENTS(params.wsum_pos) GE 1)) THEN BEGIN
+	IF ((wsum_cube_exists NE 1) AND (N_ELEMENTS(params.wsum_pos) GE 1)) THEN BEGIN
     MESSAGE,'Status: creating summed wing cube...', /INFO
     EBDETECT_MAKE_SUMCUBE, params.inputdir+params.inputfile, $
-      params.wsum_pos, NLP=params.nlp, NS=params.ns, $
-      WRITE_INPLACE=params.write_inplace, OUTDIR=params.outdir
+      params.wsum_pos, NLP=params.nlp, $
+      OUTPUTFILENAME='wsum_'+FILE_BASENAME(params.inputfile), $
+      WRITE_INPLACE=params.write_inplace, OUTDIR=params.outputdir
   ENDIF
      
   ; Create summed "line-center" cube if multiple positions around line center
   ; are given
-  IF ((lcsum_cube_exist NE 1) AND (nlcsum_pos GT 1)) THEN BEGIN
+  IF ((lcsum_cube_exists NE 1) AND (N_ELEMENTS(params.lcsum_pos) GE 1)) THEN BEGIN
     MESSAGE,'Status: creating summed line center cube...', /INFO
     EBDETECT_MAKE_SUMCUBE, params.inputdir+params.inputfile, $
-      params.lcsum_pos, NLP=params.nlp, NS=params.ns, $
+      params.lcsum_pos, NLP=params.nlp, $
       OUTPUTFILENAME='lcsum_'+FILE_BASENAME(params.inputfile), $
-      WRITE_INPLACE=params.write_inplace, OUTDIR=params.outdir
+      WRITE_INPLACE=params.write_inplace, OUTDIR=params.outputdir
   ENDIF
 
-	IF (verbose EQ 2) THEN STOP
+	IF (verbose EQ 3) THEN STOP
 
 ;============================================================================== 
 
