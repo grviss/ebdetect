@@ -1,28 +1,37 @@
 ;+
 ; NAME:
-;	  DETECT_EB
+;	  EBDETECT
 ;
 ; PURPOSE:
-;	  This routine is meant for Ellerman bomb detection, but detects anything above a certain
-;   intensity threshold given the input parameters.
+;	  This routine is meant for Ellerman bomb detection, but detects anything
+;   above a certain intensity and size threshold given the input parameters.
 ;
 ; CATEGORY:
 ;   Data analysis
 ;	
 ; CALLING SEQUENCE:
-;	
+;   EBDETECT, ConfigFile	
 ;
 ; INPUTS:
-;	  inputfile - inputfile in CRISPEX-ready format
-;   nlp       - number of wavelength positions in inputfile
 ;
 ; OPTIONAL INPUTS:
+;	  ConfigFile  - input configuration file that contains information on all 
+;                 data files, detection parameters and switches. If not provided, 
+;                 EBDETECT will look for ebdetect_config.txt in the working
+;                 directory 
 ;
 ; KEYWORD PARAMETERS:
-;   REGION_THRESHOLD  - region over which the mean and standard deviation should
-;                       be calculated. Takes either a string filename or a
-;                       4-element array [x0,y0,x1,y1].
+;   VERBOSE     - Set verbosity level:
+;                   0 = no feedback
+;                   1 = initial parameters and progress timers
+;                   2 = as 1, plus interim status reports and detection
+;                       statistics
+;                   3 = as 2, plus stopping in between major steps for debugging
+;
 ; OUTPUTS:
+;   Depending on the switches set in the configuration file, the code will
+;   output detection files and/or mask cubes with initial, intermediate and
+;   final detections. 
 ;
 ; OPTIONAL OUTPUTS:
 ;
@@ -33,7 +42,7 @@
 ; RESTRICTIONS:
 ;   Requires the following procedures and functions:
 ;   Procedures: LP_HEADER, LP_WRITE, MK_SUMMED_CUBE, PROCESS_TIMER
-;   Functions:  LP_GET()
+;   Functions:  EBDETECT_INITIALIZE(), LP_GET()
 ;
 ; PROCEDURE:
 ;
@@ -42,92 +51,116 @@
 ; MODIFICATION HISTORY:
 ;   2012 March Gregal Vissers: First version
 ;   2012 Dec 12 GV: Updated version of old routine
-;   $Id$
+;   2016 Sep 16 GV: Imported current version into CVS
+;   2016 Nov 30 GV: Cleaned away all input keywords that are now populated from
+;                   the configuration file and updated handling of input keywords
 ;-
 ;
-PRO DETECT_EB, inputfile, nlp, $    ; input file, number of spectral positions in input file
-               ; Detection constraints and switches
-               LC_POS=lc_pos, $                               ; position to take into account
-               LC_SIGMA=lc_sigma, $                           ; sigma for lc constraint
-               LOOSE_HYSTERESIS=loose_hysteresis, $           ; apply loose intensity hysteresis
-               SIZE_CONSTRAINT=size_constraint, $             ; minimum nr of connected pixels
-               KERNEL_SIZE=kernel_size, $                     ; apply size constraints to kernel
-               DOUBLE_SET=double_set, $                       ; use double precision in MEAN/STDEV
-               LIFETIME_CONSTRAINT=lifetime_constraint, $     ; minimum lifetime in timesteps
-               SIGMA_CONSTRAINT=sigma_constraint, $           ; minimum sigma counts above average
-               FACTOR_SIGMA=factor_sigma, $                   ; sigma is not sigma, but % of mean
-               REGION_THRESHOLD=region_threshold, $           ; region to determine mean and sigma 
-               RUNNING_MEAN=running_mean, $                   ; use running MEAN and STDEV
-               OVERLAP_CONSTRAINT=overlap_constraint, $       ; minimum spatial overlap between steps
-               T_SKIP_CONSTRAINT=t_skip_constraint, $         ; maximum nr of steps before overlap
-	             SUM_POSITIONS=sum_positions, $                 ; spectral positions to sum over
-               SUM_CUBE=sum_cube, $                           ; input summed cube
-               LC_SUM_CUBE=lc_sum_cube, $                     ; input lc summed cube
-               MERGE_CHECK=merge_check, $                     ; check for merging events
-               SPLIT_CHECK=split_check, $                     ; check for splitting events
-               OVERRIDE_MERGE=override_merge,$                ; override merging
-               REMOVE_DETECTIONS=remove_detections, $         ; labels of detections to be removed
-               COMPARISON_MASK=comparison_mask, $             ; cube with mask for comparison
-               PAD=pad, $                                     ; add padding
-               LIMIT_GROUP_SEARCH=limit_group_search, $       ; limit timespan to look for same label
-               GET_KERNELS=get_kernels, $                     ; get kernel info
-               ; Output switches
-               WRITE_MASK_CUBE=write_mask_cube, $             ; write mask cube switch
-               WRITE_FIRST_DETECT=write_first_detect, $       ; write threshold detect file switch
-               FIRST_DETECT_FILE=first_detect_file, $         ; input threshold detect file
-               WRITE_OVERLAP_DETECT=write_overlap_detect, $   ; write overlap detection file switch
-	             WRITE_FINAL_MASK_CUBE=write_final_mask_cube, $ ; write final mask cube switch
-               WRITE_INPLACE=write_inplace, $                 ; use LP_PUT to write cube
-               VERBOSE=verbose                                ; verbose switch
+PRO EBDETECT, ConfigFile, VERBOSE=verbose 
 
-; =================================================================================================
-; Read in variables
-  PRINT,'Status: processing variables and switches...'
-	LP_HEADER,inputfile,nx=nx, ny=ny, nt=imnt
-	nt = imnt/nlp
-  ; Intensity thresholds and switches
-	IF (N_ELEMENTS(SIGMA_CONSTRAINT) LT 1) THEN sigma_constraint = 0. ELSE BEGIN
-    sigma_constraint = sigma_constraint[SORT(sigma_constraint)]
-    nlevels = N_ELEMENTS(sigma_constraint)
-  ENDELSE
-  nlc_pos = N_ELEMENTS(LC_POS)
-  IF (N_ELEMENTS(LC_SIGMA) GT 1) THEN $
-    lc_sigma = lc_sigma[SORT(lc_sigma)]
-  ; Spatial thresholds
-  min_size = 0
-  max_size = LONG(nx)*LONG(ny)
-  dataratio = nx/FLOAT(ny)
-	IF (N_ELEMENTS(SIZE_CONSTRAINT) GE 1) THEN min_size = size_constraint[0] 
-	IF (N_ELEMENTS(SIZE_CONSTRAINT) EQ 2) THEN max_size = size_constraint[1] 
-  IF (N_ELEMENTS(OVERLAP_CONSTRAINT) NE 1) THEN overlap_constraint = 1.
-	IF (N_ELEMENTS(MERGE_CHECK) NE 1) THEN merge_check = 1
-  ; Lifetime thresholds
-  min_lifetime = 0
-  max_lifetime = nt
-	IF (N_ELEMENTS(LIFETIME_CONSTRAINT) GE 1) THEN min_lifetime = lifetime_constraint[0] 
-	IF (N_ELEMENTS(LIFETIME_CONSTRAINT) EQ 2) THEN max_lifetime = lifetime_constraint[1] 
-	IF (N_ELEMENTS(T_SKIP_CONSTRAINT) NE 1) THEN t_skip_constraint = 1
-  ; Verbosity 
-  IF (N_ELEMENTS(VERBOSE) NE 1) THEN verbose = 0
+;============================================================================== 
 
-; =================================================================================================
-	; Sum wings
-	; Feed positions to SUM_POSITIONS
-	; Writing of the summed cube is implied
-	IF (N_ELEMENTS(SUM_POSITIONS) GE 1) THEN BEGIN
-    PRINT,'Status: creating summed wing cube...'
-    MK_SUMMED_CUBE, inputfile, sum_positions, NLP=nlp, NS=ns, SET_NS=set_ns
+  id_string = '$Id$'
+  IF (N_PARAMS() LT 1) THEN BEGIN
+    MESSAGE, id_string, /INFO
+    MESSAGE, 'Syntax: EBDETECT, ConfigFile [, VERBOSE=verbose]', /INFO
+    RETURN
   ENDIF
-                    
-  IF (nlc_pos GT 1) THEN BEGIN
-    PRINT,'Status: creating summed line center cube...'
-    MK_SUMMED_CUBE, inputfile, lc_pos, NLP=nlp, NS=ns, SET_NS=set_ns, $
-      OUTPUTFILENAME='lcsum_'+FILE_BASENAME(inputfile)
+
+  IF (N_ELEMENTS(VERBOSE) NE 1) THEN verbose = 0
+ 
+  ; Get parameters and exit on error
+  params = EBDETECT_INITIALIZE(ConfigFile, VERBOSE=(verbose GE 2))
+  IF (params.exit_status EQ 0) THEN RETURN
+  
+  ; Read in variables
+  feedback_txt = 'processing variables and switches.'
+  EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
+  IF (STRMID(params.inputdir,0,1,/REVERSE) NE PATH_SEP()) THEN $
+    params.inputdir += PATH_SEP()
+  IF (STRMID(params.outputdir,0,1,/REVERSE) NE PATH_SEP()) THEN $
+    params.outputdir += PATH_SEP()
+  IF (params.inputfile NE '') THEN BEGIN
+    inputfile_exists = FILE_TEST(params.inputdir+params.inputfile)
+    IF inputfile_exists THEN BEGIN
+    	LP_HEADER,params.inputfile, NX=nx, NY=ny, NT=imnt 
+  	  nt = imnt/params.nlp
+    ENDIF ELSE BEGIN
+      EBDETECT_FEEDBACK, /ERROR, /TERMINATE, $
+        'No inputfile '+params.inputfile+' exists in directory '+$
+        params.inputdir
+      RETURN 
+    ENDELSE
+  ENDIF ELSE IF (params.sum_cube NE '') THEN BEGIN
+    sum_cube_exists = FILE_TEST(params.inputdir + params.sum_cube)
+    IF sum_cube_exists THEN $
+      LP_HEADER, params.sum_cube, NX=nx, NY=ny, NT=nt  $
+    ELSE BEGIN
+      EBDETECT_FEEDBACK, /ERROR, /TERMINATE, $
+        'No inputfile '+params.sum_cube+' exists in directory '+$
+        params.inputdir
+      RETURN 
+    ENDELSE
+  ENDIF ELSE BEGIN
+    EBDETECT_FEEDBACK, /ERROR, /TERMINATE, $
+      'Either inputfile or sum_cube should be supplied with an existing file.'+$
+      ' Please check your input in '+ConfigFile+'.'
+    RETURN
+  ENDELSE
+  lcsum_cube_exist = 0
+  IF (params.lcsum_cube NE '') THEN $
+    lcsum_cube_exist = FILE_TEST(params.inputdir + params.lcsum_cube)
+  params.nx = nx
+  params.ny = ny
+  params.nt = nt
+  ; Intensity thresholds and switches
+  IF (N_ELEMENTS(params.sigma_constraint) GT 1) THEN $
+    sigma_constraint = params.sigma_constraint[SORT(params.sigma_constraint)]
+  nlevels = N_ELEMENTS(sigma_constraint)
+  nlcsum_pos = N_ELEMENTS(params.lcsum_pos)
+  IF (N_ELEMENTS(params.lc_sigma) GT 1) THEN $
+    lc_sigma = params.lc_sigma[SORT(params.lc_sigma)]
+  ; Spatial thresholds
+  min_size = params.size_constraint[0]
+	IF (N_ELEMENTS(params.size_constraint) GT 1) THEN $
+    max_size = params.size_constraint[1] $
+  ELSE $
+    max_size = LONG(params.nx)*LONG(params.ny)
+  dataratio = params.nx/FLOAT(params.ny)
+  ; Lifetime thresholds
+  min_lifetime = params.lifetime_constraint[0]
+  max_lifetime = nt
+	IF (N_ELEMENTS(LIFETIME_CONSTRAINT) EQ 2) THEN $
+    max_lifetime = lifetime_constraint[1] $
+  ELSE $
+    max_lifetime = params.nt
+
+  EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
+  IF (verbose EQ 3) THEN STOP
+
+;============================================================================== 
+  ; Create summed wing cube if multiple sum_positions are given
+	IF ((sum_cube_exists NE 1) AND (N_ELEMENTS(params.wsum_pos) GE 1)) THEN BEGIN
+    MESSAGE,'Status: creating summed wing cube...', /INFO
+    EBDETECT_MAKE_SUMCUBE, params.inputdir+params.inputfile, $
+      params.wsum_pos, NLP=params.nlp, NS=params.ns, $
+      WRITE_INPLACE=params.write_inplace, OUTDIR=params.outdir
+  ENDIF
+     
+  ; Create summed "line-center" cube if multiple positions around line center
+  ; are given
+  IF ((lcsum_cube_exist NE 1) AND (nlcsum_pos GT 1)) THEN BEGIN
+    MESSAGE,'Status: creating summed line center cube...', /INFO
+    EBDETECT_MAKE_SUMCUBE, params.inputdir+params.inputfile, $
+      params.lcsum_pos, NLP=params.nlp, NS=params.ns, $
+      OUTPUTFILENAME='lcsum_'+FILE_BASENAME(params.inputfile), $
+      WRITE_INPLACE=params.write_inplace, OUTDIR=params.outdir
   ENDIF
 
 	IF (verbose EQ 2) THEN STOP
 
-; =================================================================================================
+;============================================================================== 
+
 ; Run first detection based on the intensity and size thresholds
 ; Supply SUM_CUBE with filename if not continuing from before
 ; Set keyword WRITE_FIRST_DETECT to write detections to file
@@ -143,10 +176,11 @@ PRO DETECT_EB, inputfile, nlp, $    ; input file, number of spectral positions i
           ; determine average 
           FOR tt=tlow,tupp DO BEGIN
             selpix = WHERE(LP_GET(REGION_THRESHOLD,tt) EQ 1)
-            IF (t EQ 0) THEN $
-              tmp_mean_summed_cube = [(LP_GET(sum_cube,tt))[selpix]] $
+            IF (t NE 0) THEN $
+              tmp_mean_summed_cube = [running_mean_summed_cube, $
+                                      (LP_GET(sum_cube,tt))[selpix]] $
             ELSE $
-              tmp_mean_summed_cube = [running_mean_summed_cube, (LP_GET(sum_cube,tt))[selpix]]
+              tmp_mean_summed_cube = [(LP_GET(sum_cube,tt))[selpix]]
           ENDFOR
           running_mean_summed_cube[t] = MEAN(tmp_mean_summed_cube,DOUBLE=KEYWORD_SET(DOUBLE_SET),/NAN)
           IF ~KEYWORD_SET(FACTOR_SIGMA) THEN BEGIN
@@ -439,6 +473,7 @@ PRO DETECT_EB, inputfile, nlp, $    ; input file, number of spectral positions i
 	  IF (verbose EQ 2) THEN STOP
 	ENDIF
 
+
 ; =================================================================================================
 ; Overlap filter: only propagate cases for which certain overlap criteria are obeyed
 ; All detections at t=0 are "true"
@@ -490,7 +525,7 @@ PRO DETECT_EB, inputfile, nlp, $    ; input file, number of spectral positions i
                            STRTRIM(t_usel,2)+','+STRTRIM(k,2)+'). Single detections: '+$
                            STRTRIM(detect_counter,2)+'.'
           ; If the number of common elements >= overlap constraint
-					IF ((N_ELEMENTS(comarr) GE overlap_constraint) AND (TOTAL(comarr) NE -1)) THEN BEGIN		
+					IF ((N_ELEMENTS(comarr) GE params.overlap_constraint) AND (TOTAL(comarr) NE -1)) THEN BEGIN		
 						IF (TOTAL(k_array) EQ -1) THEN k_array = k ELSE k_array = [k_array,k]
 						IF (TOTAL(ncomarr) EQ -1) THEN ncomarr = ncomarr_val ELSE ncomarr = [ncomarr,ncomarr_val]
 						overlapped = 1
@@ -537,7 +572,7 @@ PRO DETECT_EB, inputfile, nlp, $    ; input file, number of spectral positions i
 ;	ENDFOR
 	IF (verbose EQ 2) THEN STOP
 	;;; Check for merging events ;;;
-	IF KEYWORD_SET(MERGE_CHECK) THEN BEGIN
+	IF KEYWORD_SET(params.merge_check) THEN BEGIN
     PRINT,''
 		PRINT,'Status: Performing merge check...'
 		pass = 0L
@@ -562,7 +597,7 @@ PRO DETECT_EB, inputfile, nlp, $    ; input file, number of spectral positions i
 						comp_detection = (*(*results[t_lsel]).structs[k]).pos
 						ARRAY_COMPARE,orig_detection,comp_detection,/COMMON_ELEMENTS,COMMON_ARRAY=comarr,NCOMMON_ARRAY=ncomarr_val		; Find the common elements between the considered detections
 						position_label = ' (t,det_orig,t_comp,det_comp)=('+STRTRIM(t,2)+','+STRTRIM(j,2)+','+STRTRIM(t_lsel,2)+','+STRTRIM(k,2)+'). Single detections: '+STRTRIM(detect_counter,2)+'.'
-						IF ((N_ELEMENTS(comarr) GE overlap_constraint) AND (TOTAL(comarr) NE -1)) THEN BEGIN		; If the number of common elements >= overlap constraint
+						IF ((N_ELEMENTS(comarr) GE params.overlap_constraint) AND (TOTAL(comarr) NE -1)) THEN BEGIN		; If the number of common elements >= overlap constraint
 							IF (TOTAL(k_array) EQ -1) THEN k_array = k ELSE k_array = [k_array,k]
 							IF (TOTAL(ncomarr) EQ -1) THEN ncomarr = ncomarr_val ELSE ncomarr = [ncomarr,ncomarr_val]
 							overlapped = 1
@@ -914,7 +949,7 @@ PRO DETECT_EB, inputfile, nlp, $    ; input file, number of spectral positions i
 ;                                 STRTRIM(t_usel,2)+','+STRTRIM(k,2)+'). Single detections: '+$
 ;                                 STRTRIM(detect_counter,2)+'.'
                 ; If the number of common elements >= overlap constraint
-      					IF ((N_ELEMENTS(comarr) GE overlap_constraint) AND (TOTAL(comarr) NE -1)) THEN BEGIN		
+      					IF ((N_ELEMENTS(comarr) GE params.overlap_constraint) AND (TOTAL(comarr) NE -1)) THEN BEGIN		
       						IF (TOTAL(k_array) EQ -1) THEN k_array = k ELSE k_array = [k_array,k]
       						IF (TOTAL(ncomarr) EQ -1) THEN ncomarr = ncomarr_val ELSE ncomarr = [ncomarr,ncomarr_val]
       						kernel_overlapped = 1
@@ -956,7 +991,7 @@ PRO DETECT_EB, inputfile, nlp, $    ; input file, number of spectral positions i
 ;      	last_kernel_detect_counter = kernel_detect_counter
 ;      	IF (verbose EQ 2) THEN STOP
       	;;; Check for merging events ;;;
-      	IF KEYWORD_SET(MERGE_CHECK) THEN BEGIN
+      	IF KEYWORD_SET(params.merge_check) THEN BEGIN
 ;      		PRINT,'Status: Performing merge check...'
       		pass = 0L
       		totpasses = 0L
@@ -979,7 +1014,7 @@ PRO DETECT_EB, inputfile, nlp, $    ; input file, number of spectral positions i
       						comp_detection = (*(*kernelresults[t_lsel]).kernels[k]).pos
       						ARRAY_COMPARE,orig_detection,comp_detection,/COMMON_ELEMENTS,COMMON_ARRAY=comarr,NCOMMON_ARRAY=ncomarr_val		; Find the common elements between the considered detections
 ;      						position_label = ' (t,det_orig,t_comp,det_comp)=('+STRTRIM(t,2)+','+STRTRIM(j,2)+','+STRTRIM(t_lsel,2)+','+STRTRIM(k,2)+'). Single detections: '+STRTRIM(detect_counter,2)+'.'
-      						IF ((N_ELEMENTS(comarr) GE overlap_constraint) AND (TOTAL(comarr) NE -1)) THEN BEGIN		; If the number of common elements >= overlap constraint
+      						IF ((N_ELEMENTS(comarr) GE params.overlap_constraint) AND (TOTAL(comarr) NE -1)) THEN BEGIN		; If the number of common elements >= overlap constraint
       							IF (TOTAL(k_array) EQ -1) THEN k_array = k ELSE k_array = [k_array,k]
       							IF (TOTAL(ncomarr) EQ -1) THEN ncomarr = ncomarr_val ELSE ncomarr = [ncomarr,ncomarr_val]
       							kernel_overlapped = 1
