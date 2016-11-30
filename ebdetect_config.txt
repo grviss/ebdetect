@@ -6,10 +6,10 @@
 ########################### INPUT FILES AND SWITCHES ###########################
 ################################################################################
 # optional: input directory. Defaults: current working directory (i.e., './')
-#INPUTDIR = './'
+#INPUTDIR = ./
 
 # optional: output directory. Defaults: current working directory (i.e., './')
-#OUTPUTDIR = './'
+#OUTPUTDIR = ./
 
 # required: data cube in which the detection is going to be done. 
 INPUTFILE = lcwsum_halpha.2010.06.28.strt.fcube
