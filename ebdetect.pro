@@ -306,10 +306,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
         IF (lc_count NE 0) THEN mask[wheregtlc] = 0B
       ENDIF
       ; Pad mask
-      IF KEYWORD_SET(PAD) THEN BEGIN
-        pad_mask = BYTARR(nx+2,ny+2)
-        pad_mask[1:nx,1:ny] = mask
-      ENDIF ELSE pad_mask = mask
+      pad_mask = BYTARR(nx+2,ny+2)
+      pad_mask[1:nx,1:ny] = mask
       wheregt0 = WHERE(pad_mask GT 0, nwheregt0)          ; Where pixels gt lower threshold
       IF (nlevels GT 1) THEN $
         wheregt1 = WHERE(pad_mask GT 1, nwheregt1) $          ; Where pixels gt upper threshold
@@ -317,10 +315,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
         wheregt1  = wheregt0
         nwheregt1 = nwheregt0
       ENDELSE
-			IF KEYWORD_SET(PAD) THEN $
-        struct_mask = BYTARR(nx+2,ny+2) $
-      ELSE $
-			  struct_mask = BYTARR(nx,ny)
+      struct_mask = BYTARR(nx+2,ny+2) 
 			IF (wheregt1[0] NE -1) THEN BEGIN
 				nstructs = 0L
 				discard_pix = -1                            ; Pixel coordinates to be discarded, init val
@@ -380,9 +375,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 ;          tmp_struct_mask = BYTARR(nx+2,ny+2)         ; New for padding 
 ;          tmp_struct_mask[1:nx,1:ny] = struct_mask    ; New for padding
 					labels = LABEL_REGION(struct_mask,/ALL_NEIGHBORS)								; Label the pixels of all regions
-          IF KEYWORD_SET(PAD) THEN BEGIN
-            labels = labels[1:nx,1:ny]                  ; New because of padding
-;            tmp_mask = pad_mask[1:nx,1:ny]
+          labels = labels[1:nx,1:ny]                  ; New because of padding
           ENDIF
 					nlabels = MAX(labels,/NAN)
 					nlabels_pix = N_ELEMENTS(WHERE(labels GT 0))							
@@ -830,22 +823,15 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 	  		sel_detect_mask[*,*,((*sel_detections[detpass]).t)[tt]] += mask
         ; Check for kernel pixels within the detection
         IF KEYWORD_SET(GET_KERNELS) THEN BEGIN
-    			IF KEYWORD_SET(PAD) THEN BEGIN
-            kernel_mask = BYTARR(nx+2,ny+2) 
-            loc_detmask = BYTARR(nx+2,ny+2)
-            loc_detmask[1:nx,1:ny] = mask
-          ENDIF ELSE BEGIN
-    			  kernel_mask = BYTARR(nx,ny)
-            loc_detmask = mask
-          ENDELSE
+          kernel_mask = BYTARR(nx+2,ny+2) 
+          loc_detmask = BYTARR(nx+2,ny+2)
+          loc_detmask[1:nx,1:ny] = mask
           loc_detpos = WHERE(mask EQ 1)
   			  nkernels = 0L
 				  discard_kernelpix = -1                            ; Pixel coordinates to be discarded, init val
           tmp_mask = mask_cube[*,*,t_real]     ; mask_cubes contains mask with 1s & 2s (=kernels)
-          IF KEYWORD_SET(PAD) THEN BEGIN
-            tmp_pad_mask = BYTARR(nx+2,ny+2)
-            tmp_pad_mask[1:nx,1:ny] = tmp_mask
-          ENDIF ELSE tmp_pad_mask = tmp_mask
+          tmp_pad_mask = BYTARR(nx+2,ny+2)
+          tmp_pad_mask[1:nx,1:ny] = tmp_mask
           loc_detpos_pad = WHERE(loc_detmask EQ 1)
           wherekernelpix = loc_detpos_pad[WHERE(tmp_pad_mask[loc_detpos_pad] EQ 2,nwherekernel)]
           FOR kk=0,nwherekernel-1 DO BEGIN
@@ -870,10 +856,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   				IF (TOTAL(WHERE(kernel_mask GT 0)) NE -1) THEN BEGIN
             ; Pad kernel_mask
   					kernellabels = LABEL_REGION(kernel_mask,/ALL_NEIGHBORS)								; Label the pixels of all regions
-            IF KEYWORD_SET(PAD) THEN BEGIN
-              kernellabels = kernellabels[1:nx,1:ny]                  ; New because of padding
-  ;            tmp_mask = pad_mask[1:nx,1:ny]
-            ENDIF
+            kernellabels = kernellabels[1:nx,1:ny]                  ; New because of padding
   					nkernellabels = MAX(kernellabels,/NAN)
   					nkernellabels_pix = N_ELEMENTS(WHERE(kernellabels GT 0))							
   					nkernel_pix = N_ELEMENTS(WHERE(kernel_mask GT 0))
