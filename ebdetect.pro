@@ -85,6 +85,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   wsum_cube_exists = 0
   lcsum_cube_exists= 0
   detect_init_file_exists = 0
+  comparison_mask_exists = 0
   IF (params.inputfile NE '') THEN BEGIN
     IF (params.sum_cube EQ 0) THEN BEGIN
       inputfile_exists = FILE_TEST(params.inputdir+params.inputfile)
@@ -118,6 +119,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     lcsum_cube_exists = FILE_TEST(params.inputdir + params.lcsum_cube)
 	IF (params.detect_init_file NE '') THEN detect_init_file_exists = $
     FILE_TEST(params.inputdir + params.detect_init_file)
+  IF (params.comparison_mask NE '') THEN $
+    comparison_mask_exists = FILE_TEST(params.inputdir + params.comparison_mask)
   params.nx = nx
   params.ny = ny
   params.nt = nt
@@ -676,64 +679,55 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 ;================================================================================
 ;=========================== Display and write results ==========================
 ;================================================================================
-	IF (KEYWORD_SET(VERBOSE) OR KEYWORD_SET(WRITE_OVERLAP_DETECT)) THEN BEGIN
-		IF KEYWORD_SET(VERBOSE) THEN BEGIN
+	IF ((verbose GE 2) OR KEYWORD_SET(params.write_detect_overlap)) THEN BEGIN
+    ; Prep before looping over time
+		IF (verbose GE 2) THEN BEGIN
 			WINDOW,XSIZE=750*dataratio,YSIZE=750
-;			PLOT,INDGEN(nx),INDGEN(ny),POS=[0,0,1,1],XRANGE=[0,nx-1],YRANGE=[0,ny-1],/XS,/YS,/NODATA
 		ENDIF
-		IF KEYWORD_SET(WRITE_OVERLAP_DETECT) THEN BEGIN
-      IF ~KEYWORD_SET(WRITE_INPLACE) THEN overlap_mask_cube = BYTARR(nx,ny,nt)
-			outputfilename='./overlap_mask_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
-                      FILE_BASENAME(sum_cube)
+		IF KEYWORD_SET(params.write_detect_overlap) THEN BEGIN
+      IF ~KEYWORD_SET(params.write_inplae) THEN $
+        overlap_mask_cube = BYTARR(params.nx,params.ny,params.nt)
+			outputfilename='./overlap_mask_stdev'+$
+        STRJOIN(STRTRIM(params.sigma_constraint,2),'-')+'_'+FILE_BASENAME()
     ENDIF
-		FOR t=0,nt-1 DO BEGIN
-			mask = BYTARR(nx,ny)
-			FOR j=0,(*results[t]).ndetect-1 DO mask[(*(*results[t]).structs[j]).pos] = 1
-			IF KEYWORD_SET(VERBOSE) THEN BEGIN
-;				TVSCL,CONGRID(summed_cube[*,*,t],750,750)
+    ; Loop over time and display results and/or write results to disk
+		FOR t=0,params.nt-1 DO BEGIN
+			mask = BYTARR(params.nx,params.ny)
+			FOR j=0,(*results[t]).ndetect-1 DO $
+        mask[(*(*results[t]).structs[j]).pos] = 1B
+			IF (verbose GE 2) THEN BEGIN
 				TV,CONGRID(BYTSCL(LP_GET(sum_cube,t),/NAN),750*dataratio,750)
 				LOADCT,13,/SILENT
 				CONTOUR,CONGRID(mask,750*dataratio,750),COLOR=255, LEVELS = 1, /ISOTROPIC, $
-;        XRANGE=[0,nx-1],YRANGE=[0,ny-1],
-        XS=13,YS=13,POSITION=[0,0,1,1],/NORMAL,/NOERASE
-        IF (N_ELEMENTS(COMPARISON_MASK) EQ 1) THEN $
-          CONTOUR,REFORM(LP_GET(comparison_mask,t)), COLOR=200, LEVELS=1, /ISO, XS=13, YS=13, $
+          XS=13,YS=13,POSITION=[0,0,1,1],/NORMAL,/NOERASE
+        IF comparison_mask_exists THEN $
+          CONTOUR,REFORM(LP_GET(params.inputdir+params.comparison_mask,t)), $
+            COLOR=200, LEVELS=1, /ISO, XS=13, YS=13, $
                   POS=[0,0,1,1], /NORMAL, /NOERASE
 				LOADCT,0,/SILENT
 				FOR j=0,(*results[t]).ndetect-1 DO BEGIN
 					xyout_pos = ARRAY_INDICES(mask,((*(*results[t]).structs[j]).pos)[0])+[-5,-20]
-;					XYOUTS,xyout_pos[0]/FLOAT(nx)*750.*dataratio,xyout_pos[1]/FLOAT(ny)*750.,STRTRIM((*(*results[t]).structs[j]).label,2), $
-					XYOUTS,xyout_pos[0]/FLOAT(nx),xyout_pos[1]/FLOAT(ny),STRTRIM((*(*results[t]).structs[j]).label,2), $
-          COLOR=255, /NORMAL, CHARSIZE=2
+					XYOUTS,xyout_pos[0]/FLOAT(nx),xyout_pos[1]/FLOAT(ny),$
+            STRTRIM((*(*results[t]).structs[j]).label,2), $
+            COLOR=255, /NORMAL, CHARSIZE=2
 				ENDFOR
 				XYOUTS,10.,10.,'All detections at t='+STRTRIM(t,2),/DATA,COLOR=255,CHARSIZE=2
 				WAIT,0.05
 			ENDIF
-			IF KEYWORD_SET(WRITE_OVERLAP_DETECT) THEN BEGIN
-        IF KEYWORD_SET(WRITE_INPLACE) THEN BEGIN
-          LP_PUT, mask, outputfilename, t, nt=nt, KEEP_OPEN=(t NE nt-1) 
-          IF (t EQ nt-1) THEN PRINT,'Written: '+outputfilename
+			IF KEYWORD_SET(params.write_detect_overlap) THEN BEGIN
+        IF KEYWORD_SET(params.write_inplace) THEN BEGIN
+          LP_PUT, mask, params.outputdir+outputfilename, t, nt=params.nt, KEEP_OPEN=(t NE params.nt-1) 
         ENDIF ELSE $
           overlap_mask_cube[*,*,t] = mask
       ENDIF
 		ENDFOR
-		IF (KEYWORD_SET(WRITE_OVERLAP_DETECT) AND ~KEYWORD_SET(WRITE_INPLACE)) THEN BEGIN
-			LP_WRITE,overlap_mask_cube,outputfilename
-			PRINT,'Written: '+outputfilename
+		IF KEYWORD_SET(params.write_detect_overlap) THEN BEGIN
+      IF  ~KEYWORD_SET(params.write_inplace)) THEN $
+  			LP_WRITE, overlap_mask_cube, params.outputdir+outputfilename
+      EBDETECT_FEEDBACK, /STATUS,'Written: '+outputfilename
 		ENDIF
 	ENDIF
 	IF (verbose EQ 3) THEN STOP
-
-
-;  IF (N_ELEMENTS(LIMIT_GROUP_SEARCH) EQ 1) THEN BEGIN
-;		FOR t=0L,nt-1 DO BEGIN												; Loop over all time steps
-;			  FOR j=0,(*results[t]).ndetect-1 DO BEGIN								; Loop over all detections at each time step
-;				  IF ((*(*results[t]).structs[j]).label EQ 11166) THEN t_first = t ; If the detection label equals the current detection counter
-;        ENDFOR
-;      ENDFOR
-;;    stop
-;  ENDIF
-
 
 ;================================================================================
 ;========================= Group detections by label ============================
