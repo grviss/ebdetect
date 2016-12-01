@@ -450,14 +450,17 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 
 
 ;================================================================================ 
+;============================ Apply overlapping check ===========================
+;================================================================================ 
 ; Overlap filter: only propagate cases for which certain overlap criteria are obeyed
 ; All detections at t=0 are "true"
 ; If a first detection file is supplied, restore it now
-	IF (N_ELEMENTS(FIRST_DETECT_FILE) EQ 1) THEN RESTORE,first_detect_file							
+	IF detect_init_file_exists THEN RESTORE, params.detect_init_file							
 	pass = 0L
-	totpasses = 0L
+;	totpasses = 0L
 	tt = 0
 	first_detect = 0
+  ; Necessary while loop as the first frame(s) might not contain any detection
 	WHILE (first_detect EQ 0) DO BEGIN
 		IF ((*results[tt]).ndetect GT 0) THEN BEGIN
 			detect_counter = LONG((*(*results[tt]).structs[(*results[tt]).ndetect-1]).label)
@@ -465,11 +468,10 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 		ENDIF
 		tt += 1
 	ENDWHILE
-	FOR t=0L,nt-2 DO totpasses += LONG((*results[t]).ndetect)
+;	FOR t=0L,params.nt-2 DO totpasses += LONG((*results[t]).ndetect)
 	t0 = SYSTIME(/SECONDS)
   ; Loop over all but the last time step
-	FOR t=0L,nt-1 DO BEGIN													
-		IF (VERBOSE EQ 2) THEN PRINT,'---------------------------------->',t
+	FOR t=0L,params.nt-1 DO BEGIN													
     ; Loop over all detections at the current time step
 		FOR j=0,(*results[t]).ndetect-1 DO BEGIN									
 			pass += 1L
@@ -481,72 +483,84 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 				(*(*results[t]).structs[j]).label = detect_counter						
 			ENDIF
 			orig_detection = (*(*results[t]).structs[j]).pos
+
 			;;; Check for splitting events ;;;
 			overlapped = 0
 			ncor = 0
 			k_array = -1
 			ncomarr = -1
 			t_usel = t
-			t_ubound = (t + t_skip_constraint) < (nt-1)
+			t_ubound = (t + t_skip_constraint) < (params.nt-1)
 			WHILE ((overlapped EQ 0) AND (t_usel LT t_ubound)) DO BEGIN
 				IF (t_usel LT t_ubound) THEN t_usel += 1
         ; Loop over all detections at the next time step
 				FOR k=0,(*results[t_usel]).ndetect-1 DO BEGIN								
 					comp_detection = (*(*results[t_usel]).structs[k]).pos
           ; Find the common elements between the considered detections
-					ARRAY_COMPARE,orig_detection,comp_detection,/COMMON_ELEMENTS,COMMON_ARRAY=comarr,$
-                        NCOMMON_ARRAY=ncomarr_val		
-					position_label = ' (t,det_orig,t_comp,det_comp)=('+STRTRIM(t,2)+','+STRTRIM(j,2)+','+$
-                           STRTRIM(t_usel,2)+','+STRTRIM(k,2)+'). Single detections: '+$
-                           STRTRIM(detect_counter,2)+'.'
+          array_compare = EBDETECT_ARRAY_COMPARE(orig_detection, comp_detection)
+;					position_label = ' (t,det_orig,t_comp,det_comp)=('+STRTRIM(t,2)+','+$
+;            STRTRIM(j,2)+','+STRTRIM(t_usel,2)+','+STRTRIM(k,2)+$
+;            '). Single detections: '+STRTRIM(detect_counter,2)+'.'
           ; If the number of common elements >= overlap constraint
-					IF ((N_ELEMENTS(comarr) GE params.overlap_constraint) AND (TOTAL(comarr) NE -1)) THEN BEGIN		
-						IF (TOTAL(k_array) EQ -1) THEN k_array = k ELSE k_array = [k_array,k]
-						IF (TOTAL(ncomarr) EQ -1) THEN ncomarr = ncomarr_val ELSE ncomarr = [ncomarr,ncomarr_val]
+					IF ((N_ELEMENTS(array_compare.common_array) GE params.overlap_constraint) AND $
+              (TOTAL(array_compare.common_array) NE -1)) THEN BEGIN		
+						IF (TOTAL(k_array) NE -1) THEN $
+              k_array = [k_array,k] $
+            ELSE $
+              k_array = k 
+						IF (TOTAL(ncomarr) NE -1) THEN $
+              ncomarr = [ncomarr,array_compare.ncommon_array] $
+            ELSE $
+              ncomarr = array_compare.ncommon_array 
 						overlapped = 1
 						ncor += 1
 					ENDIF
 				ENDFOR
 			ENDWHILE
-			IF overlapped THEN BEGIN											; If overlap occurs, assign the labels
-				IF (ncor GT 1) THEN BEGIN
-					wheremaxoverlap = WHERE(ncomarr EQ MAX(ncomarr,/NAN),COMPLEMENT=wherenotmaxoverlap,NCOMPLEMENT=nwherenotmaxoverlap)
-					oldlabel = (*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label 
-					(*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label = (*(*results[t]).structs[j]).label 		; Assign the next detection the current detection label
-          extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
-            STRTRIM((*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label,2)+','+$
-            STRTRIM(ncomarr[0],2)
-;					PRINT,t,oldlabel,'>',(*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label,ncomarr[0]
-					FOR kk=0,nwherenotmaxoverlap-1 DO BEGIN
-						oldlabel = (*(*results[t_usel]).structs[k_array[wherenotmaxoverlap[kk]]]).label 
-						detect_counter += 1L										; - Increase the detection counter by 1
-;						PRINT,t_usel,oldlabel,'>',(*(*results[t_usel]).structs[k_array[wherenotmaxoverlap[kk]]]).label,ncomarr[kk]
-						(*(*results[t_usel]).structs[k_array[wherenotmaxoverlap[kk]]]).label = detect_counter 		; Assign the next detection the current detection label
-					ENDFOR
-				ENDIF ELSE BEGIN
+
+      ; If overlap occurs, assign the labels
+			IF overlapped THEN BEGIN											
+        ; If there is only one that overlaps
+        IF (ncor EQ 1) THEN BEGIN
 					oldlabel = (*(*results[t_usel]).structs[k_array[0]]).label 
-					(*(*results[t_usel]).structs[k_array[0]]).label = (*(*results[t]).structs[j]).label 		; Assign the next detection the current detection label
+          ; Assign the next detection the current detection label
+					(*(*results[t_usel]).structs[k_array[0]]).label = $
+            (*(*results[t]).structs[j]).label 		
           extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
             STRTRIM((*(*results[t_usel]).structs[k_array[0]]).label,2)+','+$
             STRTRIM(ncomarr[0],2)
-;					PRINT,t_usel,oldlabel,'>',(*(*results[t_usel]).structs[k_array[0]]).label,ncomarr[0]
+        ENDIF ELSE BEGIN
+          ; If there are multiple that overlap, determine which one has the
+          ; biggest overlap
+					wheremaxoverlap = WHERE(ncomarr EQ MAX(ncomarr,/NAN),$
+            COMPLEMENT=wherenotmaxoverlap,NCOMPLEMENT=nwherenotmaxoverlap)
+					oldlabel = (*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label 
+          ; Assign the next detection the current detection label
+					(*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label = $
+            (*(*results[t]).structs[j]).label 		
+          extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
+            STRTRIM((*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label,2)+','+$
+            STRTRIM(ncomarr[0],2)
+					FOR kk=0,nwherenotmaxoverlap-1 DO BEGIN
+						oldlabel = (*(*results[t_usel]).structs[k_array[wherenotmaxoverlap[kk]]]).label 
+						detect_counter += 1L										; - Increase the detection counter by 1
+            ; Assign the next detection the current detection label
+						(*(*results[t_usel]).structs[$
+              k_array[wherenotmaxoverlap[kk]]]).label = detect_counter 		
+					ENDFOR
 				ENDELSE
-			ENDIF ELSE BEGIN
+			ENDIF ELSE $
         extraout = 'No overlap: '+STRTRIM((*(*results[t]).structs[j]).label,2)
-;				PRINT,t,(*(*results[t]).structs[j]).label
-			ENDELSE
-      EBDETECT_TIMER, t+1, nt, t0, EXTRA=extraout
+      ; Output timer and extra information
+      EBDETECT_TIMER, t+1, params.nt, t0, EXTRA=extraout
 		ENDFOR
 	ENDFOR
 	last_detect_counter = detect_counter
-;	FOR j=0,(*results[nt-1]).ndetect-1 DO BEGIN										; Loop over all detections at the last time step
-;		IF ((*(*results[nt-1]).structs[j]).label GT last_detect_counter) THEN BEGIN					; If the detection label exceeds the last detection counter
-;			detect_counter += 1L											; - Increase the detection counter by 1
-;			(*(*results[nt-1]).structs[j]).label = detect_counter							; - Relabel that detection with the updated detection counter
-;		ENDIF
-;	ENDFOR
-	IF (verbose EQ 2) THEN STOP
-	;;; Check for merging events ;;;
+	IF (verbose EQ 3) THEN STOP
+
+;================================================================================
+;=========================== Check for merging events ===========================
+;================================================================================
 	IF KEYWORD_SET(params.merge_check) THEN BEGIN
     PRINT,''
 		PRINT,'Status: Performing merge check...'
