@@ -54,7 +54,7 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
   ; Create structure with default values
   result = { $
     ; File and directory names
-    inputfile:'', sum_cube:'', lcsum_cube:'', comparison_mask:'', $
+    inputfile:'', lcsum_cube:'', comparison_mask:'', $
     detect_init_file:'', inputdir:'./', outputdir:'./', $
     ; Detection parameters
     nlp:1L, nx:1L, ny:1L, nt:1L, wsum_pos:0L, lcsum_pos:0L, $
@@ -65,8 +65,8 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
     region_threshold:[0L,0L,0L,0L], remove_detections:-1, $
     override_merge:[-1,-1,-1,-1], $
     ; Switches
-    factor_sigma:1B, double_set:1B, get_kernels:0B, $
-    pad:1B, merge_check:1B, split_check:1B, $
+    sum_cube:0B, factor_sigma:1B, double_set:1B, get_kernels:0B, $
+    lc_constraint:0B, pad:1B, merge_check:1B, split_check:1B, $
     write_mask_cube:1B, write_detect_init:1B, write_detect_overlap:1B, $
     write_final_mask_cube:1B, write_inplace:1B, $
     exit_status:0B }
