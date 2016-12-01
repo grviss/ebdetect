@@ -565,16 +565,20 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 ;=========================== Check for merging events ===========================
 ;================================================================================
 	IF KEYWORD_SET(params.merge_check) THEN BEGIN
-    PRINT,''
-		PRINT,'Status: Performing merge check...'
+    IF (verbose GE 1) THEN BEGIN
+      PRINT,''
+      IF (verbose GE 2) THEN $
+        EBDETECT_FEEDBACK, /STATUS, 'Performing merge check...'
+    ENDIF
 		pass = 0L
 		totpasses = 0L
-		FOR t=0,nt-1 DO totpasses += LONG((*results[t]).ndetect)
+		FOR t=0,params.nt-1 DO totpasses += LONG((*results[t]).ndetect)
 		t0 = SYSTIME(/SECONDS)
-		FOR t_dum=0,nt-1 DO BEGIN													; Loop over all but the last time step
-			t = nt-t_dum-1
-;			PRINT,'---------------------------------->',t
-			FOR j=0,(*results[t]).ndetect-1 DO BEGIN									; Loop over all detections at the current time step
+    ; Loop over all but the last time step
+		FOR t_dum=0,params.nt-1 DO BEGIN													
+			t = params.nt-t_dum-1
+      ; Loop over all detections at the current time step
+			FOR j=0,(*results[t]).ndetect-1 DO BEGIN									
 				pass += 1L
 				orig_detection = (*(*results[t]).structs[j]).pos
 				overlapped = 0
@@ -583,37 +587,49 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 				ncomarr = -1
 				t_lsel = t
 				t_lbound = (t - t_skip_constraint) > 0
-				WHILE ((overlapped EQ 0) AND (t_lsel GT t_lbound)) DO BEGIN						; Check labels and overlap
+        ; Check labels and overlap
+				WHILE ((overlapped EQ 0) AND (t_lsel GT t_lbound)) DO BEGIN						
 					IF (t_lsel GT t_lbound) THEN t_lsel -= 1
-					FOR k=0,(*results[t_lsel]).ndetect-1 DO BEGIN								; Loop over all detections at the next time step
+					FOR k=0,(*results[t_lsel]).ndetect-1 DO BEGIN								
+            ; Loop over all detections at the next time step
 						comp_detection = (*(*results[t_lsel]).structs[k]).pos
-						ARRAY_COMPARE,orig_detection,comp_detection,/COMMON_ELEMENTS,COMMON_ARRAY=comarr,NCOMMON_ARRAY=ncomarr_val		; Find the common elements between the considered detections
-						position_label = ' (t,det_orig,t_comp,det_comp)=('+STRTRIM(t,2)+','+STRTRIM(j,2)+','+STRTRIM(t_lsel,2)+','+STRTRIM(k,2)+'). Single detections: '+STRTRIM(detect_counter,2)+'.'
-						IF ((N_ELEMENTS(comarr) GE params.overlap_constraint) AND (TOTAL(comarr) NE -1)) THEN BEGIN		; If the number of common elements >= overlap constraint
-							IF (TOTAL(k_array) EQ -1) THEN k_array = k ELSE k_array = [k_array,k]
-							IF (TOTAL(ncomarr) EQ -1) THEN ncomarr = ncomarr_val ELSE ncomarr = [ncomarr,ncomarr_val]
+            ; Find the common elements between the considered detections
+            array_compare = EBDETECT_ARRAY_COMPARE(orig_detection, $
+              comp_detection)
+            ; If the number of common elements >= overlap constraint
+						IF ((N_ELEMENTS(array_compare.common_array) GE $
+                params.overlap_constraint) AND $
+                (TOTAL(array_compare.common_array) NE -1)) THEN BEGIN		
+						  IF (TOTAL(k_array) NE -1) THEN $
+                k_array = [k_array,k] $
+              ELSE $
+                k_array = k 
+						  IF (TOTAL(ncomarr) NE -1) THEN $
+                ncomarr = [ncomarr,array_compare.ncommon_array] $
+              ELSE $
+                ncomarr = array_compare.ncommon_array 
 							overlapped = 1
 							ncor += 1
 						ENDIF
-;						EBDETECT_TIMER, pass, totpasses, t0, EXTRA_OUTPUT=position_label
 					ENDFOR
 				ENDWHILE			
-				IF overlapped THEN BEGIN										; If overlap occured, assign labels
+        
+        ; If overlap occured, assign labels
+				IF overlapped THEN BEGIN										
 					IF (ncor GT 1) THEN BEGIN
 						wheremaxoverlap = WHERE(ncomarr EQ MAX(ncomarr,/NAN))
 						oldlabel = (*(*results[t]).structs[j]).label
 						newlabel = (*(*results[t_lsel]).structs[k_array[wheremaxoverlap[0]]]).label 
             extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
-            STRTRIM(newlabel,2)+','+STRTRIM(ncomarr[wheremaxoverlap[0]],2)
-;						PRINT,t,oldlabel,'>',newlabel,ncomarr[wheremaxoverlap[0]]
-						(*(*results[t]).structs[j]).label = newlabel						;Assign the current detection the previous detection label
+              STRTRIM(newlabel,2)+','+STRTRIM(ncomarr[wheremaxoverlap[0]],2)
+            ;Assign the current detection the previous detection label
+						(*(*results[t]).structs[j]).label = newlabel						
 						FOR tt = t+1,nt-1 DO BEGIN
 							kk = 0
 							newlabel_set = 0
 							WHILE ((newlabel_set EQ 0) AND (kk LT (*results[tt]).ndetect-1)) DO BEGIN
 								kk += 1	
 								IF ((*(*results[tt]).structs[kk]).label EQ oldlabel) THEN BEGIN
-;									PRINT,tt,(*(*results[tt]).structs[kk]).label,'>',newlabel
 									(*(*results[tt]).structs[kk]).label = newlabel
 									newlabel_set = 1
 								ENDIF
@@ -630,22 +646,32 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 ;================================================================================
 ;=========================== Override merging events ============================
 ;================================================================================
-	IF (N_ELEMENTS(OVERRIDE_MERGE) EQ 4) THEN BEGIN
-		PRINT,'Overriding merge detection:'
-		FOR t=override_merge[0],override_merge[1] DO BEGIN
-			FOR k=0,(*results[t]).ndetect-1 DO BEGIN
-				oldlabel = (*(*results[t]).structs[k]).label 
-				IF (oldlabel EQ override_merge[2]) THEN BEGIN
-					(*(*results[t]).structs[k]).label = override_merge[3]
-					PRINT,t,k,oldlabel,'('+STRTRIM(override_merge[2],2)+') >',override_merge[3]
-				ENDIF ELSE PRINT,t,k,oldlabel
-			ENDFOR
-		ENDFOR
+	IF (N_ELEMENTS(params.override_merge) EQ 4) THEN BEGIN
+    IF (TOTAL(params.override_merge) NE -4) THEN BEGIN
+  		IF (verbose GE 2) THEN $
+        EBDETECT_FEEDBACK, /STATUS, 'Overriding merge detection:'
+  		FOR t=params.override_merge[0],params.override_merge[1] DO BEGIN
+  			FOR k=0,(*results[t]).ndetect-1 DO BEGIN
+  				oldlabel = (*(*results[t]).structs[k]).label 
+  				IF (oldlabel EQ params.override_merge[2]) THEN BEGIN
+  					(*(*results[t]).structs[k]).label = params.override_merge[3]
+            IF (verbose GE 2) THEN $
+              EBDETECT_FEEDBACK, '(t,detection,oldlabel,newlabel) => ('+$
+  					    STRTRIM(t,2)+','+STRTRIM(k,2)+','+STRTRIM(oldlabel,2)+$
+                STRTRIM(params.override_merge[3],2)+')'
+  				ENDIF ELSE $
+            EBDETECT_FEEDBACK, 'No detection labelled '+STRTRIM(oldlabel,2)+$
+            ' found at '+STRTRIM(t,2)
+  			ENDFOR
+  		ENDFOR
+    ENDIF
 	ENDIF
 
-  PRINT,''
-	PRINT,'Final number of single detections: '+STRTRIM(detect_counter,2)
-	IF (verbose EQ 3) THEN STOP
+  IF (verbose GE 2) THEN BEGIN
+      EBDETECT_FEEDBACK, /STATUS, $
+	      'Final number of single detections: '+STRTRIM(detect_counter,2)
+	  IF (verbose EQ 3) THEN STOP
+  ENDIF
 
 ;================================================================================
 ;=========================== Display and write results ==========================
