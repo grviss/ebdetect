@@ -21,6 +21,8 @@
 ;   CALLBY        - scalar string specifying the procedure/function name calling
 ;                   EBDETECT_TIMER, or set as flag (in which case EBDETECT_TIMER 
 ;                   will find out by itself)
+;   DONE          - add "done!" at end of extra output once done
+;   TOTAL_TIME    - print out total time spend once done
 ;
 ; OUTPUTS:
 ;   String containing the current status of a process plus estimated time of
@@ -37,10 +39,11 @@
 ;
 ; MODIFICATION HISTORY:
 ; 	2016 Nov 30 Gregal Vissers: Taylored version from PROCESS_TIMER
+;   2016 Dec 01 GV: Added DONE and TOTAL_TIME keywords
 ;-
 
 PRO EBDETECT_TIMER, pass, npass, t0, EXTRA_OUTPUT=extra_output, $
-  CALLBY=callby
+  CALLBY=callby, DONE=done, TOTAL_TIME=total_time
 
   id_string = '$Id$'
 	IF (N_PARAMS() LT 3) THEN BEGIN
@@ -78,7 +81,14 @@ PRO EBDETECT_TIMER, pass, npass, t0, EXTRA_OUTPUT=extra_output, $
               STRTRIM(100.*pass/FLOAT(npass),2),STRTRIM(LONG(pass),2),STRTRIM(LONG(npass),2),$
               STRTRIM((leftsectime),2), extra_output)
   IF (pass EQ npass) THEN BEGIN
-    PRINT,' Total time: '+STRTRIM((totalsectime),2)
+    IF KEYWORD_SET(DONE) THEN BEGIN
+      IF (STRCOMPRESS(extra_output) EQ '') THEN $
+        PRINT, ' Done!' $
+      ELSE $
+        PRINT, ' done!'
+    ENDIF
+    IF KEYWORD_SET(TOTAL_TIME) THEN $
+      MESSAGE,' Total time: '+STRTRIM((totalsectime),2), /INFO
   ENDIF
 
 END
