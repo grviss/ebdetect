@@ -627,6 +627,9 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 		ENDFOR
 	ENDIF
 
+;================================================================================
+;=========================== Override merging events ============================
+;================================================================================
 	IF (N_ELEMENTS(OVERRIDE_MERGE) EQ 4) THEN BEGIN
 		PRINT,'Overriding merge detection:'
 		FOR t=override_merge[0],override_merge[1] DO BEGIN
@@ -642,7 +645,11 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 
   PRINT,''
 	PRINT,'Final number of single detections: '+STRTRIM(detect_counter,2)
-	IF (verbose EQ 2) THEN STOP
+	IF (verbose EQ 3) THEN STOP
+
+;================================================================================
+;=========================== Display and write results ==========================
+;================================================================================
 	IF (KEYWORD_SET(VERBOSE) OR KEYWORD_SET(WRITE_OVERLAP_DETECT)) THEN BEGIN
 		IF KEYWORD_SET(VERBOSE) THEN BEGIN
 			WINDOW,XSIZE=750*dataratio,YSIZE=750
@@ -689,17 +696,22 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 			PRINT,'Written: '+outputfilename
 		ENDIF
 	ENDIF
-	IF (verbose EQ 2) THEN STOP
+	IF (verbose EQ 3) THEN STOP
 
-  IF (N_ELEMENTS(LIMIT_GROUP_SEARCH) EQ 1) THEN BEGIN
-		FOR t=0L,nt-1 DO BEGIN												; Loop over all time steps
-			  FOR j=0,(*results[t]).ndetect-1 DO BEGIN								; Loop over all detections at each time step
-				  IF ((*(*results[t]).structs[j]).label EQ 11166) THEN t_first = t ; If the detection label equals the current detection counter
-        ENDFOR
-      ENDFOR
-;    stop
-  ENDIF
 
+;  IF (N_ELEMENTS(LIMIT_GROUP_SEARCH) EQ 1) THEN BEGIN
+;		FOR t=0L,nt-1 DO BEGIN												; Loop over all time steps
+;			  FOR j=0,(*results[t]).ndetect-1 DO BEGIN								; Loop over all detections at each time step
+;				  IF ((*(*results[t]).structs[j]).label EQ 11166) THEN t_first = t ; If the detection label equals the current detection counter
+;        ENDFOR
+;      ENDFOR
+;;    stop
+;  ENDIF
+
+
+;================================================================================
+;========================= Group detections by label ============================
+;================================================================================
 	; Group detections by label
 	detections = PTRARR(detect_counter,/ALLOCATE_HEAP)
 	sel_detect_idx = -1
@@ -781,8 +793,11 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   PRINT,''
 	PRINT,'sel_detect_idx: ',sel_detect_idx
 	PRINT,'Final number of detections after lifetime constraint: '+STRTRIM(N_ELEMENTS(sel_detect_idx),2)
-	IF (verbose EQ 2) THEN STOP
+	IF (verbose EQ 3) THEN STOP
 	
+;================================================================================
+;========================= Apply lifetime constraints ===========================
+;================================================================================
 	; Applying lifetime constraint
 	nsel_detections_orig = N_ELEMENTS(sel_detect_idx)
   nremove_detections = N_ELEMENTS(REMOVE_DETECTIONS)
@@ -1128,8 +1143,13 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 		ENDIF
 		IF (verbose EQ 2) THEN WAIT,0.5
 	ENDFOR
-	IF (verbose EQ 2) THEN STOP
+	IF (verbose EQ 3) THEN STOP
   IF (replay EQ 1) THEN GOTO,replay_point
+
+
+;================================================================================
+;============================== Write final results =============================
+;================================================================================
 	IF KEYWORD_SET(WRITE_FINAL_MASK_CUBE) THEN BEGIN
 		outputfilename='./final_mask_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
                       FILE_BASENAME(sum_cube)
@@ -1147,7 +1167,9 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     ENDIF
 	ENDIF
 
-
+;================================================================================
+;=========================== Output final statistics ============================
+;================================================================================
   PRINT,'Detection statistics:'
   PRINT,'# after intensity & size thresholds: '+STRTRIM(totnlabels,2)
 	PRINT,'# after continuity constraints:      '+STRTRIM(detect_counter,2)
@@ -1155,7 +1177,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 	IF KEYWORD_SET(GET_KERNELS) THEN $
     PRINT,'# of kernels:                        '+STRTRIM(kernel_detect_counter,2)
 
-	IF (verbose EQ 2) THEN STOP
+	IF (verbose EQ 3) THEN STOP
 ;	IF KEYWORD_SET(WRITE_MASK_CUBE) THEN BEGIN
 ;		LP_WRITE, mask_cube, './mask_'+FILE_BASENAME(inputfile)
 ;		PRINT,'Written: ./mask_'+FILE_BASENAME(inputfile)
