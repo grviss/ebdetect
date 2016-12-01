@@ -80,9 +80,11 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     params.inputdir += PATH_SEP()
   IF (STRMID(params.outputdir,0,1,/REVERSE) NE PATH_SEP()) THEN $
     params.outputdir += PATH_SEP()
+  ; Check existence of input files
   inputfile_exists = 0
   wsum_cube_exists = 0
   lcsum_cube_exists= 0
+  detect_init_file_exists = 0
   IF (params.inputfile NE '') THEN BEGIN
     IF (params.sum_cube EQ 0) THEN BEGIN
       inputfile_exists = FILE_TEST(params.inputdir+params.inputfile)
@@ -114,6 +116,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   ENDELSE
   IF (params.lcsum_cube NE '') THEN $
     lcsum_cube_exists = FILE_TEST(params.inputdir + params.lcsum_cube)
+	IF (params.detect_init_file NE '') THEN detect_init_file_exists = $
+    FILE_TEST(params.inputdir + params.detect_init_file)
   params.nx = nx
   params.ny = ny
   params.nt = nt
@@ -178,11 +182,11 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 ; Run first detection based on the intensity and size thresholds
 ; Supply SUM_CUBE with filename if not continuing from before
 ; Set keyword WRITE_FIRST_DETECT to write detections to file
-	IF (params.detect_init_file NE '') THEN BEGIN
+	IF (detect_init_file_exists NE 1) THEN BEGIN
     IF (params.running_mean EQ 1) THEN BEGIN
       IF (SIZE(params.running_mean,/TYPE) NE 7) THEN BEGIN
         running_mean_summed_cube = FLTARR(params.nt)
-        IF ~KEYWORD_SET(FACTOR_SIGMA) THEN $
+        IF ~KEYWORD_SET(params.factor_sigma) THEN $
           running_sdev = FLTARR(params.nt) $
         ELSE $
           running_sdev = 'N/A'
@@ -256,21 +260,23 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     ENDELSE
 
     ; Determine line center constraints if any given
-    IF (N_ELEMENTS(lc_sigma) EQ 1) THEN BEGIN
+    IF KEYWORD_SET(params.lc_constraint) THEN BEGIN
       lc_summed_cube = FLTARR(params.nx,params.ny,params.nt)
-      IF (N_ELEMENTS(LC_SUM_CUBE) EQ 1) THEN BEGIN
+      IF lcsum_cube_exists THEN $
         FOR t=0,params.nt-1 DO lc_summed_cube[0,0,t] = LP_GET(lc_sum_cube,t)
       ENDIF ELSE BEGIN
-        FOR t=0,params.nt-1 DO lc_summed_cube[0,0,t] = LP_GET(inputfile,t*nlp+lc_pos)
+        FOR t=0,params.nt-1 DO $
+          lc_summed_cube[0,0,t] = LP_GET(inputfile,t*nlp+params.lcsum_pos)
       ENDELSE
-      IF (N_ELEMENTS(REGION_THRESHOLD) GE 1) THEN BEGIN
-        IF (N_ELEMENTS(REGION_THRESHOLD) EQ 4) THEN $
-          sel_lc_summed_cube = lc_summed_cube[region_threshold[0]:region_threshold[2],$
-                                        region_threshold[1]:region_threshold[3],*] $
+      IF (N_ELEMENTS(params.region_threshold) GE 1) THEN BEGIN
+        IF (N_ELEMENTS(params.region_threshold) EQ 4) THEN $
+          sel_lc_summed_cube = $
+            lc_summed_cube[params.region_threshold[0]:params.region_threshold[2],$
+                           params.region_threshold[1]:params.region_threshold[3],*] $
         ELSE BEGIN
           t0 = SYSTIME(/SECONDS)
           FOR t=0L,params.nt-1 DO BEGIN
-            lc_selpix = WHERE(LP_GET(REGION_THRESHOLD,t) EQ 1, count)
+            lc_selpix = WHERE(LP_GET(params.region_threshold,t) EQ 1, count)
             IF (count NE 0) THEN BEGIN
               IF (t EQ 0) THEN $
                 sel_lc_summed_cube = [(LP_GET(lc_sum_cube,t))[lc_selpix]] $
@@ -288,56 +294,66 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       mean_lc_cube = MEAN(sel_lc_summed_cube, /DOUBLE, /NAN)
     ENDIF
 
-    ; Start intensity thresholding
-		mask_cube = BYTARR(nx,ny,nt)                     ; Define empty mask cube
-		totalpixels = LONG(nx)*LONG(ny)
-		results = PTRARR(nt,/ALLOCATE_HEAP)
+;===============================================================================
+;======================== Start intensity thresholding =========================
+;===============================================================================
+    ; Define empty mask cube
+		mask_cube = BYTARR(params.nx,params.ny,params.nt)                     
+		totalpixels = LONG(params.nx)*LONG(params.ny)
+		results = PTRARR(params.nt,/ALLOCATE_HEAP)
 		pass = 0L
 		totnstructs = 0L
 		totnlabels = 0L
-		IF KEYWORD_SET(VERBOSE) THEN WINDOW,XSIZE=512*dataratio,YSIZE=512
+		IF (verbose GE 2) THEN WINDOW, XSIZE=512*dataratio, YSIZE=512
 		t0 = SYSTIME(/SECONDS)
-		FOR t=0L,nt-1 DO BEGIN
-			mask = BYTARR(nx,ny)                           ; Define empty mask
+		FOR t=0L,params.nt-1 DO BEGIN
+			mask = BYTARR(params.nx,params.ny)                           
 			select_summed_cube = LP_GET(sum_cube,t)
       ; Select the pixels where cube intensity > mean intensity + sigma * stdev
       IF KEYWORD_SET(RUNNING_MEAN) THEN BEGIN
         mean_summed_cube = running_mean_summed_cube[t]
         sdev = running_sdev[t]
       ENDIF
-      FOR s=0,nlevels-1 DO BEGIN                      ; Allow for hysteresis constraints
-        IF KEYWORD_SET(FACTOR_SIGMA) THEN  $
-          threshold = mean_summed_cube*sigma_constraint[s] $
+      FOR s=0,nlevels-1 DO BEGIN                      
+        ; Allow for hysteresis constraints
+        IF KEYWORD_SET(params.factor_sigma) THEN  $
+          threshold = mean_summed_cube*params.sigma_constraint[s] $
         ELSE $
-          threshold = mean_summed_cube+sigma_constraint[s]*sdev
+          threshold = mean_summed_cube+params.sigma_constraint[s]*sdev
   			wheregt = WHERE(select_summed_cube GT threshold, count)			
+        ; Increase mask pixels gt constraint with 1
         IF (count NE 0) THEN $
-    			mask[wheregt] += 1B                              ; Increase mask pixels gt constraint with 1
+    			mask[wheregt] += 1B                              
       ENDFOR
+
       ; Process line center condition, i.e., I < lc_threshold
-      IF (N_ELEMENTS(LC_SIGMA) EQ 1) THEN BEGIN
-        IF (N_ELEMENTS(LC_SUM_CUBE) EQ 1) THEN $
+      IF KEYWORD_SET(params.lc_constraint) THEN BEGIN
+        IF lcsum_cube_exists THEN $
           select_lc_cube = LP_GET(lc_sum_cube,t) $
         ELSE $
-          select_lc_cube = LP_GET(inputfile,t*nlp+lc_pos)
-        lc_threshold = mean_lc_cube + lc_sigma[0]*sdev_lc_cube
+          select_lc_cube = LP_GET(inputfile,t*nlp+params.lcsum_pos)
+        lc_threshold = mean_lc_cube + params.lc_sigma[0]*sdev_lc_cube
         wheregtlc = WHERE(select_lc_cube GT lc_threshold, lc_count)
         IF (lc_count NE 0) THEN mask[wheregtlc] = 0B
       ENDIF
+
       ; Pad mask
-      pad_mask = BYTARR(nx+2,ny+2)
-      pad_mask[1:nx,1:ny] = mask
-      wheregt0 = WHERE(pad_mask GT 0, nwheregt0)          ; Where pixels gt lower threshold
+      pad_mask = BYTARR(params.nx+2,params.ny+2)
+      pad_mask[1:params.nx,1:params.ny] = mask
+      ; Where pixels gt lower threshold
+      wheregt0 = WHERE(pad_mask GT 0, nwheregt0)          
       IF (nlevels GT 1) THEN $
-        wheregt1 = WHERE(pad_mask GT 1, nwheregt1) $          ; Where pixels gt upper threshold
+        ; Where pixels gt upper threshold
+        wheregt1 = WHERE(pad_mask GT 1, nwheregt1) $          
       ELSE BEGIN
         wheregt1  = wheregt0
         nwheregt1 = nwheregt0
       ENDELSE
-      struct_mask = BYTARR(nx+2,ny+2) 
+      struct_mask = BYTARR(params.nx+2,params.ny+2) 
 			IF (wheregt1[0] NE -1) THEN BEGIN
 				nstructs = 0L
-				discard_pix = -1                            ; Pixel coordinates to be discarded, init val
+        ; Pixel coordinates to be discarded, init val
+				discard_pix = -1                            
 				FOR i=0L,nwheregt1-1 DO BEGIN									; Loop over all selected pixels
           ; If the considered pixel is not a discarded pixel, begin growing region
 					IF (TOTAL(discard_pix EQ wheregt1[i]) LE 0) THEN BEGIN					
@@ -351,23 +367,6 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
             ENDIF ELSE structpix = wheregt1[i]
 						nstructpix = N_ELEMENTS(structpix)
 						IF (N_ELEMENTS(SIZE_CONSTRAINT) GE 1) THEN BEGIN
-;              ; If the grown region >= size constraint, check whether max size is set
-;							IF (nstructpix GE min_size) THEN BEGIN					
-;                IF (N_ELEMENTS(MAX_SIZE) EQ 1) THEN BEGIN
-;                  ; If the grown region <= max size, discard all pixels of region in next grow
-;                  IF (nstructpix LE max_size) THEN BEGIN
-;    								discard_pix = structpix[1:nstructpix-1]
-;    								struct_mask[structpix] = 1B					; Add the region to the mask
-;    								nstructs += 1L
-;    								totnstructs += 1L
-;                  ENDIF
-;                ENDIF ELSE BEGIN
-;  								discard_pix = structpix[1:nstructpix-1]
-;  								struct_mask[structpix] = 1B						; Add the region to the mask
-;  								nstructs += 1L
-;  								totnstructs += 1L
-;                ENDELSE
-;							ENDIF
 							IF ((nstructpix GE min_size) AND (nstructpix LE max_size)) THEN BEGIN
     						IF (nstructpix NE 1) THEN $     ; Added check for limb-to-limb
                   discard_pix = structpix[1:nstructpix-1] $
@@ -382,27 +381,22 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
                 discard_pix = structpix[1:nstructpix-1] $
               ELSE $
                 discard_pix = -1
-;							discard_pix = structpix[1:nstructpix-1]
 							struct_mask[structpix] = 1B						; Add the region to the mask
 							nstructs += 1L
 							totnstructs += 1L
 						ENDELSE
 					ENDIF
 				ENDFOR
-				IF (TOTAL(WHERE(struct_mask GT 0)) NE -1) THEN BEGIN
-          ; Pad struct_mask
-;          tmp_struct_mask = BYTARR(nx+2,ny+2)         ; New for padding 
-;          tmp_struct_mask[1:nx,1:ny] = struct_mask    ; New for padding
-					labels = LABEL_REGION(struct_mask,/ALL_NEIGHBORS)								; Label the pixels of all regions
-          labels = labels[1:nx,1:ny]                  ; New because of padding
+        ; If there is a valid detection, initiate labelling and writing to
+        ; results structure
+        IF (TOTAL(WHERE(struct_mask GT 0)) NE -1) THEN BEGIN
+          ; Label the pixels of all regions
+					labels = LABEL_REGION(struct_mask,/ALL_NEIGHBORS)								
+          labels = labels[1:params.nx,1:params.ny]                  
 					nlabels = MAX(labels,/NAN)
 					nlabels_pix = N_ELEMENTS(WHERE(labels GT 0))							
 					nstruct_pix = N_ELEMENTS(WHERE(struct_mask GT 0))
-					IF (nstruct_pix NE nlabels_pix) THEN BEGIN							
-            ; If number of structure pixels != the number of label pixels, stop with error
-						PRINT,'Something is very wrong here... '+STRTRIM(nstruct_pix,2)+' NE '+STRTRIM(nlabels_pix,2)
-						STOP
-					ENDIF ELSE BEGIN										
+					IF (nstruct_pix EQ nlabels_pix) THEN BEGIN							
             ; If nlabel_pix = nstructs_pix, then start writing results
 						label_vals = LINDGEN(nlabels)+1
 						structs = PTRARR(nlabels,/ALLOCATE_HEAP)
@@ -411,46 +405,16 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
               ; Select the pixels corresponding to current label
 							positions = WHERE(labels EQ label_vals[j])					
               ; Write results to pointer
-;              IF KEYWORD_SET(LOOSE_HYSTERESIS) THEN $
-							  *structs[j] = CREATE_STRUCT('label',label_vals[j]+totnlabels,'pos',positions)	
-;              ELSE BEGIN
-;                wherekernel = positions[WHERE(tmp_mask[positions] GT 1,nwherekernel)]
-;          			IF KEYWORD_SET(PAD) THEN $
-;                  kernel_mask = BYTARR(nx+2,ny+2) $
-;                ELSE $
-;          			  kernel_mask = BYTARR(nx,ny)
-;          			IF (wherekernel[0] NE -1) THEN BEGIN
-;          				nkerknels = 0L
-;          				discard_kernelpix = -1                            ; Pixel coordinates to be discarded, init val
-;          				FOR k=0L,nwherekernel-1 DO BEGIN									; Loop over all selected pixels
-;                    ; If the considered pixel is not a discarded pixel, begin growing region
-;          					IF (TOTAL(discard_kernelpix EQ wherekernel[k]) LE 0) THEN BEGIN					
-;                      IF (nwherekernel GT 1) THEN $
-;                      ; Grow the region of selected pixels touching the selected pixel
-;            						kernelpix = REGION_GROW(pad_mask,wherekernel[k],/ALL, THRESH=2)
-;                      ELSE kernelpix = wherekernel[k]
-;          						nkernelpix = N_ELEMENTS(kernelpix)
-;              					IF (nkernelpix NE 1) THEN $       ; Added check for limb-to-limb
-;                          discard_kernelpix = kernelpix[1:nkernelpix-1] $
-;                        ELSE $
-;                          discard_kernelpix = -1
-;          							kernel_mask[kernelpix] = 1B						; Add the region to the mask
-;          							nkernels += 1L
-;          							totnkernels += 1L
-;          					ENDIF
-;          				ENDFOR
-;                ENDIF
-;						    kernels = PTRARR(nkernels,/ALLOCATE_HEAP)
-;							  *structs[j] = CREATE_STRUCT('label',label_vals[j]+totnlabels,'pos',positions,$
-;                                'nkernels',nkernels,
-;              ENDELSE  
-;              stop
+							*structs[j] = CREATE_STRUCT('label',label_vals[j]+totnlabels,'pos',positions)	
 						ENDFOR
+					ENDIF ELSE BEGIN										
+            ; If number of structure pixels != the number of label pixels, stop with error
+            EBDETECT_FEEDBACK, /ERROR, $
+						  'Something is very wrong here... '+$
+              STRTRIM(nstruct_pix,2)+' NE '+STRTRIM(nlabels_pix,2)
+          ENDELSE
 					ENDELSE
-					IF KEYWORD_SET(VERBOSE) THEN BEGIN
-;            TVSCL,CONGRID(select_summed_cube,512*dataratio,512)
-;            CONTOUR,CONGRID(labels,512*dataratio,512),$
-;              XS=13,YS=13,POS=[0,0,1,1],/NOERASE,/OVERPLOT,/ISOTROPIC
+					IF (verbose GE 2) THEN BEGIN
             TVSCL,CONGRID(labels,512*dataratio,512)
           ENDIF
 				ENDIF ELSE BEGIN
@@ -465,28 +429,27 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 			ENDELSE
 			mask_cube[*,*,t] = mask
       ; Write time marker, number of detections and structures pointer to results pointer
- ;     IF KEYWORD_SET(LOOS_HYSTERESIS) THEN $
-			  *results[t] = CREATE_STRUCT('t',t,'ndetect',nlabels,'structs',structs) 
-;      ELSE $
-;			  *results[t] = CREATE_STRUCT('t',t,'ndetect',nlabels,'structs',structs,'kernels',kernels)
-			pass += 1L
-			EBDETECT_TIMER, pass, nt, t0, EXTRA_OUTPUT=' Pixels detected: '+STRTRIM(nwheregt1,2)+'+'+$
-                    STRTRIM(nwheregt0,2)+'/'+STRTRIM(totalpixels,2)+$
-                   '. Detected structures: '+STRTRIM(nlabels,2)+'/'+STRTRIM(totnlabels,2)+'.'
+			*results[t] = CREATE_STRUCT('t',t,'ndetect',nlabels,'structs',structs) 
+			; Update timer and output extra information
+      pass += 1L
+			EBDETECT_TIMER, pass, params.nt, t0, $
+        EXTRA_OUTPUT=' Pixels detected: '+STRTRIM(nwheregt1,2)+'+'+$
+        STRTRIM(nwheregt0,2)+'/'+STRTRIM(totalpixels,2)+$
+        '. Detected structures: '+STRTRIM(nlabels,2)+'/'+STRTRIM(totnlabels,2)+'.'
 		ENDFOR
    ; Write thresholding detections to file
-		IF KEYWORD_SET(WRITE_FIRST_DETECT) THEN BEGIN									
+		IF KEYWORD_SET(params.write_detect_init) THEN BEGIN									
 			ndetections = totnlabels
-			outputfilename='detect_eb_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
-                      FILE_BASENAME(sum_cube)+'_det1.save'
-			SAVE, results, ndetections, FILENAME=outputfilename
+			outputfilename='ebdetect_stdev'+STRJOIN(STRTRIM(params.sigma_constraint,2),'-')+'_'+$
+                      FILE_BASENAME(sum_cube)+'_detect_init.idlsave'
+			SAVE, results, ndetections, FILENAME=params.outputdir+outputfilename
 			PRINT,'Written: '+outputfilename
 		ENDIF
-	  IF (verbose EQ 2) THEN STOP
+	  IF (verbose EQ 3) THEN STOP
 	ENDIF
 
 
-; =================================================================================================
+;================================================================================ 
 ; Overlap filter: only propagate cases for which certain overlap criteria are obeyed
 ; All detections at t=0 are "true"
 ; If a first detection file is supplied, restore it now
