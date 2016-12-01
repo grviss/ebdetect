@@ -123,6 +123,10 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   nlevels = N_ELEMENTS(sigma_constraint)
   IF (N_ELEMENTS(params.lc_sigma) GT 1) THEN $
     lc_sigma = params.lc_sigma[SORT(params.lc_sigma)]
+  IF (N_ELEMENTS(params.region_threshold) EQ 4) THEN $
+    region_threshold_set = (TOTAL(params.region_threshold) NE 0) $
+  ELSE $
+    region_threshold_set = (STRCOMPRESS(params.region_threshold) NE '')
   ; Spatial thresholds
   min_size = params.size_constraint[0]
 	IF (N_ELEMENTS(params.size_constraint) GT 1) THEN $
@@ -133,8 +137,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   ; Lifetime thresholds
   min_lifetime = params.lifetime_constraint[0]
   max_lifetime = nt
-	IF (N_ELEMENTS(LIFETIME_CONSTRAINT) EQ 2) THEN $
-    max_lifetime = lifetime_constraint[1] $
+	IF (N_ELEMENTS(params.lifetime_constraint) EQ 2) THEN $
+    max_lifetime = params.lifetime_constraint[1] $
   ELSE $
     max_lifetime = params.nt
 
@@ -147,9 +151,14 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     MESSAGE,'Status: creating summed wing cube...', /INFO
     EBDETECT_MAKE_SUMCUBE, params.inputdir+params.inputfile, $
       params.wsum_pos, NLP=params.nlp, $
-      OUTPUTFILENAME='wsum_'+FILE_BASENAME(params.inputfile), $
+      OUTPUTFILENAME=params.outputdir+'wsum_'+FILE_BASENAME(params.inputfile), $
       WRITE_INPLACE=params.write_inplace, OUTDIR=params.outputdir
-  ENDIF
+  ENDIF ELSE BEGIN
+    IF KEYWORD_SET(params.sum_cube) THEN $
+      sum_cube = params.inputdir+params.inputfile $
+    ELSE $
+      sum_cube = params.outputdir+'wsum_'+FILE_BASENAME(params.inputfile)
+  ENDELSE
      
   ; Create summed "line-center" cube if multiple positions around line center
   ; are given
@@ -157,9 +166,10 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     MESSAGE,'Status: creating summed line center cube...', /INFO
     EBDETECT_MAKE_SUMCUBE, params.inputdir+params.inputfile, $
       params.lcsum_pos, NLP=params.nlp, $
-      OUTPUTFILENAME='lcsum_'+FILE_BASENAME(params.inputfile), $
+      OUTPUTFILENAME=params.outputdir+'lcsum_'+FILE_BASENAME(params.inputfile), $
       WRITE_INPLACE=params.write_inplace, OUTDIR=params.outputdir
-  ENDIF
+  ENDIF ELSE $
+    lcsum_cube = params.inputdir+params.lcsum_cube
 
 	IF (verbose EQ 3) THEN STOP
 
@@ -168,18 +178,21 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 ; Run first detection based on the intensity and size thresholds
 ; Supply SUM_CUBE with filename if not continuing from before
 ; Set keyword WRITE_FIRST_DETECT to write detections to file
-	IF (N_ELEMENTS(FIRST_DETECT_FILE) NE 1) THEN BEGIN
-    IF (N_ELEMENTS(RUNNING_MEAN) EQ 1) THEN BEGIN
-      IF (SIZE(RUNNING_MEAN,/TYPE) NE 7) THEN BEGIN
-        running_mean_summed_cube = FLTARR(nt)
-        running_sdev = FLTARR(nt)
+	IF (params.detect_init_file NE '') THEN BEGIN
+    IF (params.running_mean EQ 1) THEN BEGIN
+      IF (SIZE(params.running_mean,/TYPE) NE 7) THEN BEGIN
+        running_mean_summed_cube = FLTARR(params.nt)
+        IF ~KEYWORD_SET(FACTOR_SIGMA) THEN $
+          running_sdev = FLTARR(params.nt) $
+        ELSE $
+          running_sdev = 'N/A'
         t0 = SYSTIME(/SECONDS)
-        FOR t=0L,nt-1 DO BEGIN
-          tlow = (t-running_mean) > 0
-          tupp = (tlow + running_mean) < (nt-1)
+        FOR t=0L,params.nt-1 DO BEGIN
+          tlow = (t-params.running_mean) > 0
+          tupp = (tlow + params.running_mean) < (params.nt-1)
           ; determine average 
           FOR tt=tlow,tupp DO BEGIN
-            selpix = WHERE(LP_GET(REGION_THRESHOLD,tt) EQ 1)
+            selpix = WHERE(LP_GET(params.region_threshold,tt) EQ 1)
             IF (t NE 0) THEN $
               tmp_mean_summed_cube = [running_mean_summed_cube, $
                                       (LP_GET(sum_cube,tt))[selpix]] $
@@ -187,44 +200,48 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
               tmp_mean_summed_cube = [(LP_GET(sum_cube,tt))[selpix]]
           ENDFOR
           running_mean_summed_cube[t] = MEAN(tmp_mean_summed_cube, /DOUBLE ,/NAN)
-          IF ~KEYWORD_SET(FACTOR_SIGMA) THEN BEGIN
-            ; Determine the standard deviation in the cube
-    		    running_sdev[t] = STDDEV(DOUBLE(tmp_mean_summed_cube),/NAN) 
-          ENDIF
-          EBDETECT_TIMER,t+1,nt,t0, EXTRA_OUTPUT='Determining running mean...'
+          ; Determine the standard deviation in the cube
+          IF ~KEYWORD_SET(FACTOR_SIGMA) THEN $
+      		  running_sdev[t] = STDDEV(DOUBLE(tmp_mean_summed_cube),/NAN) 
+          EBDETECT_TIMER,t+1,params.nt,t0, EXTRA_OUTPUT='Determining running mean...'
         ENDFOR
         PRINT,'done!'
-  			outputfilename='detect_eb_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
-                        FILE_BASENAME(sum_cube)+'_running_mean_sdev.save'
-  			SAVE, running_mean_summed_cube,running_sdev, FILENAME=outputfilename
-  			PRINT,'Written: '+outputfilename
-      ENDIF ELSE RESTORE, running_mean, VERBOSE=verbose
+  			outputfilename='ebdetect_stdev'+STRJOIN(STRTRIM(params.sigma_constraint,2),'-')+'_'+$
+                        FILE_BASENAME(sum_cube)+'_running_mean_sdev.idlsave'
+  			SAVE, running_mean_summed_cube, running_sdev, $
+          FILENAME=params.outputdir+outputfilename
+        EBDETECT_FEEDBACK, /SATUS, 'Written: '+outputfilename
+      ENDIF ELSE RESTORE, params.running_mean, VERBOSE=(verbose GT 1)
     ENDIF ELSE BEGIN
       ; Read in summed wing cube
-  		IF (N_ELEMENTS(SUM_CUBE) EQ 1) THEN BEGIN
-        summed_cube = FLTARR(nx,ny,nt)
+  		IF KEYWORD_SET(params.sum_cube) THEN BEGIN
+        summed_cube = FLTARR(params.nx,params.ny,params.nt)
         t0 = SYSTIME(/SECONDS)
-        FOR t=0,nt-1 DO BEGIN
+        FOR t=0,params.nt-1 DO BEGIN
           summed_cube[*,*,t] = LP_GET(sum_cube,t)
-          EBDETECT_TIMER,t+1,nt,t0,EXTRA_OUTPUT='Getting summed wing cube in memory...'
+          EBDETECT_TIMER,t+1,params.nt,t0, $
+            EXTRA_OUTPUT='Getting summed wing cube in memory...'
         ENDFOR
         PRINT,'done!'
       ENDIF
-      IF (N_ELEMENTS(REGION_THRESHOLD) GE 1) THEN BEGIN
-        IF (N_ELEMENTS(REGION_THRESHOLD) EQ 4) THEN $
-          sel_summed_cube = summed_cube[region_threshold[0]:region_threshold[2],$
-                                        region_threshold[1]:region_threshold[3],*] $
+      ; Select only pixels as defined by REGION_THRESHOLD
+      IF (N_ELEMENTS(params.region_threshold) GE 1) THEN BEGIN
+        IF (N_ELEMENTS(params.region_threshold) EQ 4) THEN $
+          sel_summed_cube = $
+            summed_cube[params.region_threshold[0]:params.region_threshold[2],$
+                        params.region_threshold[1]:params.region_threshold[3],*] $
         ELSE BEGIN
           t0 = SYSTIME(/SECONDS)
-          FOR t=0L,nt-1 DO BEGIN
-            selpix = WHERE(LP_GET(REGION_THRESHOLD,t) EQ 1, count)
+          FOR t=0L,params.nt-1 DO BEGIN
+            selpix = WHERE(LP_GET(params.region_threshold,t) EQ 1, count)
             IF (count NE 0) THEN BEGIN
               IF (t EQ 0) THEN $
                 sel_summed_cube = [(LP_GET(sum_cube,t))[selpix]] $
               ELSE $
                 sel_summed_cube = [sel_summed_cube, (LP_GET(sum_cube,t))[selpix]]
             ENDIF
-            EBDETECT_TIMER,t+1,nt,t0, EXTRA_OUTPUT='Determining selected summed wing cube pixels...'
+            EBDETECT_TIMER,t+1,params.nt,t0, $
+              EXTRA_OUTPUT='Determining selected summed wing cube pixels...'
           ENDFOR            
           PRINT,'done!'
         ENDELSE
@@ -237,13 +254,14 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       ; Determine the average of the cube
   		mean_summed_cube = MEAN(sel_summed_cube, /DOUBLE,/NAN)             
     ENDELSE
+
     ; Determine line center constraints if any given
     IF (N_ELEMENTS(lc_sigma) EQ 1) THEN BEGIN
-      lc_summed_cube = FLTARR(nx,ny,nt)
+      lc_summed_cube = FLTARR(params.nx,params.ny,params.nt)
       IF (N_ELEMENTS(LC_SUM_CUBE) EQ 1) THEN BEGIN
-        FOR t=0,nt-1 DO lc_summed_cube[0,0,t] = LP_GET(lc_sum_cube,t)
+        FOR t=0,params.nt-1 DO lc_summed_cube[0,0,t] = LP_GET(lc_sum_cube,t)
       ENDIF ELSE BEGIN
-        FOR t=0,nt-1 DO lc_summed_cube[0,0,t] = LP_GET(inputfile,t*nlp+lc_pos)
+        FOR t=0,params.nt-1 DO lc_summed_cube[0,0,t] = LP_GET(inputfile,t*nlp+lc_pos)
       ENDELSE
       IF (N_ELEMENTS(REGION_THRESHOLD) GE 1) THEN BEGIN
         IF (N_ELEMENTS(REGION_THRESHOLD) EQ 4) THEN $
@@ -251,7 +269,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
                                         region_threshold[1]:region_threshold[3],*] $
         ELSE BEGIN
           t0 = SYSTIME(/SECONDS)
-          FOR t=0L,nt-1 DO BEGIN
+          FOR t=0L,params.nt-1 DO BEGIN
             lc_selpix = WHERE(LP_GET(REGION_THRESHOLD,t) EQ 1, count)
             IF (count NE 0) THEN BEGIN
               IF (t EQ 0) THEN $
@@ -259,7 +277,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
               ELSE $
                 sel_lc_summed_cube = [sel_lc_summed_cube, (LP_GET(lc_sum_cube,t))[lc_selpix]]
             ENDIF
-            EBDETECT_TIMER,t+1,nt,t0, $
+            EBDETECT_TIMER,t+1,params.nt,t0, $
               EXTRA_OUTPUT='Determining selected summed line center cube pixels...'
           ENDFOR
           PRINT,'done!'
@@ -268,8 +286,9 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
         sel_lc_summed_cube = lc_summed_cube
       sdev_lc_cube = STDDEV(sel_lc_summed_cube, /DOUBLE, /NAN)
       mean_lc_cube = MEAN(sel_lc_summed_cube, /DOUBLE, /NAN)
-      print,mean_lc_cube,sdev_lc_cube
     ENDIF
+
+    ; Start intensity thresholding
 		mask_cube = BYTARR(nx,ny,nt)                     ; Define empty mask cube
 		totalpixels = LONG(nx)*LONG(ny)
 		results = PTRARR(nt,/ALLOCATE_HEAP)
@@ -376,7 +395,6 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 ;          tmp_struct_mask[1:nx,1:ny] = struct_mask    ; New for padding
 					labels = LABEL_REGION(struct_mask,/ALL_NEIGHBORS)								; Label the pixels of all regions
           labels = labels[1:nx,1:ny]                  ; New because of padding
-          ENDIF
 					nlabels = MAX(labels,/NAN)
 					nlabels_pix = N_ELEMENTS(WHERE(labels GT 0))							
 					nstruct_pix = N_ELEMENTS(WHERE(struct_mask GT 0))
