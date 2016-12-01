@@ -207,9 +207,10 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
           ; Determine the standard deviation in the cube
           IF ~KEYWORD_SET(FACTOR_SIGMA) THEN $
       		  running_sdev[t] = STDDEV(DOUBLE(tmp_mean_summed_cube),/NAN) 
-          EBDETECT_TIMER,t+1,params.nt,t0, EXTRA_OUTPUT='Determining running mean...'
+          IF (verbose GE 1) THEN $
+            EBDETECT_TIMER,t+1,params.nt,t0, /DONE, TOTAL_TIME=(verbose GE 2), $
+              EXTRA_OUTPUT='Determining running mean...'
         ENDFOR
-        PRINT,'done!'
   			outputfilename='ebdetect_stdev'+STRJOIN(STRTRIM(params.sigma_constraint,2),'-')+'_'+$
                         FILE_BASENAME(sum_cube)+'_running_mean_sdev.idlsave'
   			SAVE, running_mean_summed_cube, running_sdev, $
@@ -223,10 +224,10 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
         t0 = SYSTIME(/SECONDS)
         FOR t=0,params.nt-1 DO BEGIN
           summed_cube[*,*,t] = LP_GET(sum_cube,t)
-          EBDETECT_TIMER,t+1,params.nt,t0, $
-            EXTRA_OUTPUT='Getting summed wing cube in memory...'
+          IF (verbose GE 1) THEN EBDETECT_TIMER,t+1,params.nt,t0, /DONE, $
+            EXTRA_OUTPUT='Getting summed wing cube in memory...', $
+            TOTAL_TIME=(verbose GE 2)
         ENDFOR
-        PRINT,'done!'
       ENDIF
       ; Select only pixels as defined by REGION_THRESHOLD
       IF (N_ELEMENTS(params.region_threshold) GE 1) THEN BEGIN
@@ -244,10 +245,10 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
               ELSE $
                 sel_summed_cube = [sel_summed_cube, (LP_GET(sum_cube,t))[selpix]]
             ENDIF
-            EBDETECT_TIMER,t+1,params.nt,t0, $
-              EXTRA_OUTPUT='Determining selected summed wing cube pixels...'
+            IF (verbose GE 1) THEN $
+              EBDETECT_TIMER,t+1,params.nt,t0, /DONE, TOTAL_TIME=(verbose GE 2), $
+                EXTRA_OUTPUT='Determining selected summed wing cube pixels...'
           ENDFOR            
-          PRINT,'done!'
         ENDELSE
       ENDIF ELSE $
         sel_summed_cube = summed_cube
@@ -283,10 +284,10 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
               ELSE $
                 sel_lc_summed_cube = [sel_lc_summed_cube, (LP_GET(lc_sum_cube,t))[lc_selpix]]
             ENDIF
-            EBDETECT_TIMER,t+1,params.nt,t0, $
+            IF (verbose GE 1) THEN $
+              EBDETECT_TIMER,t+1,params.nt,t0, /DONE, TOTAL_TIME=(verbose GE 2), $
               EXTRA_OUTPUT='Determining selected summed line center cube pixels...'
           ENDFOR
-          PRINT,'done!'
         ENDELSE
       ENDIF ELSE $
         sel_lc_summed_cube = lc_summed_cube
@@ -432,7 +433,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 			*results[t] = CREATE_STRUCT('t',t,'ndetect',nlabels,'structs',structs) 
 			; Update timer and output extra information
       pass += 1L
-			EBDETECT_TIMER, pass, params.nt, t0, $
+			IF (verbose GE 1) THEN $
+        EBDETECT_TIMER, pass, params.nt, t0, /DONE, TOTAL_TIME=(verbose GE 2), $
         EXTRA_OUTPUT=' Pixels detected: '+STRTRIM(nwheregt1,2)+'+'+$
         STRTRIM(nwheregt0,2)+'/'+STRTRIM(totalpixels,2)+$
         '. Detected structures: '+STRTRIM(nlabels,2)+'/'+STRTRIM(totnlabels,2)+'.'
@@ -552,7 +554,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 			ENDIF ELSE $
         extraout = 'No overlap: '+STRTRIM((*(*results[t]).structs[j]).label,2)
       ; Output timer and extra information
-      EBDETECT_TIMER, t+1, params.nt, t0, EXTRA=extraout
+      IF (verbose GE 1) THEN EBDETECT_TIMER, t+1, params.nt, t0, $
+        EXTRA=extraout, TOTAL_TIME=(verbose GE 2)
 		ENDFOR
 	ENDFOR
 	last_detect_counter = detect_counter
@@ -618,7 +621,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 						ENDFOR
 					ENDIF
 				ENDIF
-        EBDETECT_TIMER,t_dum+1,nt,t0,EXTRA=extraout
+        IF (verbose GE 1) THEN EBDETECT_TIMER,t_dum+1,nt,t0,EXTRA=extraout, $
+          TOTAL_TIME=(verbose GE 2)
 			ENDFOR
 		ENDFOR
 	ENDIF
@@ -768,9 +772,11 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 			*det[tt] = CREATE_STRUCT('pos',(*(*results[t_arr[tt]]).structs[j_arr[tt]]).pos)
 		ENDFOR
 		*detections[d] = CREATE_STRUCT('label',label_check,'t',t_arr,'lifetime',lifetime,'det',det)				; Write results grouped by detection with lifetime information
-		EBDETECT_TIMER, label_check, detect_counter, t0, EXTRA=extra+' d='+STRTRIM(d,2)+', nt='+$
+		IF (verbose GE 1) THEN $
+      EBDETECT_TIMER, label_check, detect_counter, t0, EXTRA=extra+' d='+STRTRIM(d,2)+', nt='+$
       STRTRIM(nt_arr,2)+', t_upp='+STRTRIM(t_arr[nt_arr-1],2)+', t_low='+STRTRIM(t_arr[0],2)+$
-      ', t='+STRTRIM(lifetime,2)+'. So far t_max='+STRTRIM(lifetime_max,2)
+      ', t='+STRTRIM(lifetime,2)+'. So far t_max='+STRTRIM(lifetime_max,2), $
+      TOTAL_TIME=(verbose GE 2)
 	ENDFOR
   PRINT,''
 	PRINT,'sel_detect_idx: ',sel_detect_idx
@@ -964,7 +970,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       			ENDIF ELSE $
               extraout = 'No overlap: '+STRTRIM((*(*kernelresults[t]).kernels[j]).label,2)
 ;      			ENDELSE
-            EBDETECT_TIMER, t+1, nt_loc, t0, EXTRA=extraout
+            IF (verbose GE 1) THEN EBDETECT_TIMER, t+1, nt_loc, t0, $
+              EXTRA=extraout, TOTAL_TIME=(verbose GE 2)
       		ENDFOR
       	ENDFOR
 ;      	last_kernel_detect_counter = kernel_detect_counter
