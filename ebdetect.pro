@@ -827,59 +827,66 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   ENDIF
 	
 ;================================================================================
-;===================== Get kernels and remove detections ========================
+;===================== Construct final detection output =========================
 ;================================================================================
+; Includes removing detections if so specified as well as getting kernels
 	nsel_detections_orig = N_ELEMENTS(sel_detect_idx)
-  nremove_detections = N_ELEMENTS(REMOVE_DETECTIONS)
+  IF (params.remove_detections[0] NE -1) THEN $
+    nremove_detections = N_ELEMENTS(params.remove_detections) $
+  ELSE $
+    nremove_detections = 0
   nsel_detections = nsel_detections_orig - nremove_detections
 	sel_detections = PTRARR(nsel_detections,/ALLOCATE_HEAP)
-	sel_detect_mask = BYTARR(nx,ny,nt)
-	IF KEYWORD_SET(VERBOSE) THEN BEGIN
+	sel_detect_mask = BYTARR(params.nx,params.ny,params.nt)
+	IF (verbose GE 2) THEN BEGIN
 		WINDOW,XSIZE=750*dataratio,YSIZE=750
-		PLOT,INDGEN(nx),INDGEN(ny),POS=[0,0,1,1],XRANGE=[0,nx-1],YRANGE=[0,ny-1],/XS,/YS,/NODATA
+		PLOT,INDGEN(params.nx),INDGEN(params.ny),POS=[0,0,1,1],XRANGE=[0,nx-1],$
+      YRANGE=[0,ny-1],/XS,/YS,/NODATA
 	ENDIF
   ; Create final selection of detections based on lifetime constraints
   detpass = 0L
-  IF KEYWORD_SET(GET_KERNELS) THEN BEGIN
+  IF KEYWORD_SET(params.get_kernels) THEN BEGIN
     totnkernellabels = 0L
     totnkernels = 0L
-    sel_kernel_mask = BYTARR(nx,ny,nt)
+    sel_kernel_mask = BYTARR(params.nx,params.ny,params.nt)
     last_kernel_detect_counter = 0L
     sum_kernel_detect_counter = 0L
   ENDIF
 	FOR dd=0L,nsel_detections_orig-1 DO BEGIN											
     detlabel = (*detections[sel_detect_idx[dd]]).label
-    print,dd,detpass,detlabel
+;    print,dd,detpass,detlabel
     ; Compare the detection label with those of the detections to be removed
-    IF (nremove_detections GE 1) THEN whereremove = WHERE(remove_detections EQ detlabel) $
-      ELSE whereremove = -1
-    IF (whereremove EQ -1) THEN BEGIN
+    IF (nremove_detections GE 1) THEN $
+      whereremove = WHERE(remove_detections EQ detlabel) $
+    ELSE $
+      whereremove = -1
+    IF (whereremove[0] EQ -1) THEN BEGIN
       ; If detection is not to be removed, continue selecting
   		*sel_detections[detpass] = *detections[sel_detect_idx[dd]]				
-;  		IF KEYWORD_SET(VERBOSE) THEN $
-;        PRINT,detpass,N_ELEMENTS(UNIQ((*sel_detections[detpass]).t))-N_ELEMENTS((*sel_detections[detpass]).t)
-;  		PRINT,N_ELEMENTS((*sel_detections[detpass]).t)
   		nt_loc = N_ELEMENTS((*sel_detections[detpass]).t)
       IF KEYWORD_SET(GET_KERNELS) THEN kernelresults = PTRARR(nt_loc,/ALLOCATE_HEAP)
   		FOR tt=0,nt_loc-1 DO BEGIN 
         t_real = ((*sel_detections[detpass]).t)[tt]
-;        detectionpos = (*(*sel_detections[detpass]).det[tt]).pos
 	  		mask = BYTARR(nx,ny)
 	  		mask[(*(*sel_detections[detpass]).det[tt]).pos] = 1B
 	  		sel_detect_mask[*,*,((*sel_detections[detpass]).t)[tt]] += mask
         ; Check for kernel pixels within the detection
-        IF KEYWORD_SET(GET_KERNELS) THEN BEGIN
-          kernel_mask = BYTARR(nx+2,ny+2) 
-          loc_detmask = BYTARR(nx+2,ny+2)
-          loc_detmask[1:nx,1:ny] = mask
+        IF KEYWORD_SET(params.get_kernels) THEN BEGIN
+          kernel_mask = BYTARR(params.nx+2,params.ny+2) 
+          loc_detmask = BYTARR(params.nx+2,params.ny+2)
+          loc_detmask[1:params.nx,1:params.ny] = mask
           loc_detpos = WHERE(mask EQ 1)
   			  nkernels = 0L
-				  discard_kernelpix = -1                            ; Pixel coordinates to be discarded, init val
-          tmp_mask = mask_cube[*,*,t_real]     ; mask_cubes contains mask with 1s & 2s (=kernels)
-          tmp_pad_mask = BYTARR(nx+2,ny+2)
-          tmp_pad_mask[1:nx,1:ny] = tmp_mask
+          ; Pixel coordinates to be discarded, init val
+				  discard_kernelpix = -1                            
+          ; mask_cubes contains mask with 1s & 2s (=kernels)
+          tmp_mask = mask_cube[*,*,t_real]     
+          tmp_pad_mask = BYTARR(params.nx+2,params.ny+2)
+          tmp_pad_mask[1:params.nx,1:params.ny] = tmp_mask
           loc_detpos_pad = WHERE(loc_detmask EQ 1)
-          wherekernelpix = loc_detpos_pad[WHERE(tmp_pad_mask[loc_detpos_pad] EQ 2,nwherekernel)]
+          ; Kernels are only those pixels that pass the high intensity threshold
+          wherekernelpix = loc_detpos_pad[$
+            WHERE(tmp_pad_mask[loc_detpos_pad] EQ 2,nwherekernel)]
           FOR kk=0,nwherekernel-1 DO BEGIN
             ; If the considered pixel is not a discarded pixel, begin growing region
   					IF (TOTAL(discard_kernelpix EQ wherekernelpix[kk]) LE 0) THEN BEGIN					
@@ -892,7 +899,6 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
                   discard_kernelpix = kernelpix[1:nkernelpix-1] $
                 ELSE $
                   discard_kernelpix = -1
-  ;							discard_pix = kernelpix[1:nkernelpix-1]
   							kernel_mask[kernelpix] = 1B						; Add the region to the mask
                 sel_kernel_mask[*,*,t_real] += kernel_mask[1:nx,1:ny]
   							nkernels += 1L
@@ -900,15 +906,16 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   					ENDIF
           ENDFOR
   				IF (TOTAL(WHERE(kernel_mask GT 0)) NE -1) THEN BEGIN
-            ; Pad kernel_mask
-  					kernellabels = LABEL_REGION(kernel_mask,/ALL_NEIGHBORS)								; Label the pixels of all regions
-            kernellabels = kernellabels[1:nx,1:ny]                  ; New because of padding
+  					kernellabels = LABEL_REGION(kernel_mask,/ALL_NEIGHBORS)								
+            kernellabels = kernellabels[1:params.nx,1:params.ny]                  
   					nkernellabels = MAX(kernellabels,/NAN)
   					nkernellabels_pix = N_ELEMENTS(WHERE(kernellabels GT 0))							
   					nkernel_pix = N_ELEMENTS(WHERE(kernel_mask GT 0))
   					IF (nkernel_pix NE nkernellabels_pix) THEN BEGIN							
               ; If number of structure pixels != the number of label pixels, stop with error
-  						PRINT,'Something is very wrong here... '+STRTRIM(nkernel_pix,2)+' NE '+STRTRIM(nkernellabels_pix,2)
+              EBDETECT_FEEDBACK, /ERROR, $
+  						  'Something is very wrong here... '+STRTRIM(nkernel_pix,2)+$
+                ' NE '+STRTRIM(nkernellabels_pix,2)
   						STOP
   					ENDIF ELSE BEGIN										
               ; If nlabel_pix = nkernels_pix, then start writing results
@@ -920,8 +927,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
                 ; Select the pixels corresponding to current label
   							kernelpositions = WHERE(kernellabels EQ kernellabel_vals[j])					
                 ; Write results to pointer
-  							  *kernels[j] = CREATE_STRUCT('label',kernellabel_vals[j]+totnkernellabels,$
-                                  'pos',kernelpositions)
+  							*kernels[j] = CREATE_STRUCT('label',kernellabel_vals[j]+totnkernellabels,$
+                  'pos',kernelpositions)
   						ENDFOR
   					ENDELSE
   				ENDIF ELSE BEGIN
@@ -929,10 +936,11 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   					kernels = 0
   				ENDELSE
   				totnkernellabels += nkernellabels
-          *kernelresults[tt] = CREATE_STRUCT('t',t_real,'nkernels',nkernellabels,'kernels',kernels)					
+          *kernelresults[tt] = CREATE_STRUCT('t',t_real,'nkernels',$
+            nkernellabels,'kernels',kernels)					
         ENDIF
 	  	ENDFOR
-      IF KEYWORD_SET(GET_KERNELS) THEN BEGIN
+      IF KEYWORD_SET(params.get_kernels) THEN BEGIN
       	pass = 0L
       	totpasses = 0L
       	tt = 0
@@ -953,7 +961,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       		FOR j=0,(*kernelresults[t]).nkernels-1 DO BEGIN									
       			pass += 1L
             ; If the label of the current detection is bigger than the detection counter
-      			IF ((*(*kernelresults[t]).kernels[j]).label GT kernel_detect_counter) THEN BEGIN					
+      			IF ((*(*kernelresults[t]).kernels[j]).label GT $
+                kernel_detect_counter) THEN BEGIN					
               ; Increase the detection counter by 1
       				kernel_detect_counter += 1L										
               ; Relabel the current detection with the updated detection counter
@@ -973,64 +982,87 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       				FOR k=0,(*kernelresults[t_usel]).nkernels-1 DO BEGIN								
       					comp_detection = (*(*kernelresults[t_usel]).kernels[k]).pos
                 ; Find the common elements between the considered detections
-      					ARRAY_COMPARE,orig_detection,comp_detection,/COMMON_ELEMENTS,COMMON_ARRAY=comarr,$
-                              NCOMMON_ARRAY=ncomarr_val		
-;      					position_label = ' (t,det_orig,t_comp,det_comp)=('+STRTRIM(t,2)+','+STRTRIM(j,2)+','+$
-;                                 STRTRIM(t_usel,2)+','+STRTRIM(k,2)+'). Single detections: '+$
-;                                 STRTRIM(detect_counter,2)+'.'
+                array_compare = EBDETECT_ARRAY_COMPARE(orig_detection, $
+                  comp_detection)
                 ; If the number of common elements >= overlap constraint
-      					IF ((N_ELEMENTS(comarr) GE params.overlap_constraint) AND (TOTAL(comarr) NE -1)) THEN BEGIN		
-      						IF (TOTAL(k_array) EQ -1) THEN k_array = k ELSE k_array = [k_array,k]
-      						IF (TOTAL(ncomarr) EQ -1) THEN ncomarr = ncomarr_val ELSE ncomarr = [ncomarr,ncomarr_val]
+      					IF ((N_ELEMENTS(array_compare.common_array) GE $
+                    params.overlap_constraint) AND $
+                    (TOTAL(array_compare.common_array) NE -1)) THEN BEGIN		
+						      IF (TOTAL(k_array) NE -1) THEN $
+                    k_array = [k_array,k] $
+                  ELSE $
+                    k_array = k 
+						      IF (TOTAL(ncomarr) NE -1) THEN $
+                    ncomarr = [ncomarr,array_compare.ncommon_array] $
+                  ELSE $
+                    ncomarr = array_compare.ncommon_array 
       						kernel_overlapped = 1
       						ncor += 1
       					ENDIF
       				ENDFOR
       			ENDWHILE
-      			IF kernel_overlapped THEN BEGIN											; If overlap occurs, assign the labels
-              ; If there is more than one detection overlapping, find out which one has the max
+
+            ; If overlap occurs, assign the labels
+      			IF kernel_overlapped THEN BEGIN											
               ; overlap
-      				IF (ncor GT 1) THEN BEGIN
-      					wheremaxoverlap = WHERE(ncomarr EQ MAX(ncomarr,/NAN),COMPLEMENT=wherenotmaxoverlap,NCOMPLEMENT=nwherenotmaxoverlap)
-      					oldlabel = (*(*kernelresults[t_usel]).kernels[k_array[wheremaxoverlap[0]]]).label 
-      					(*(*kernelresults[t_usel]).kernels[k_array[wheremaxoverlap[0]]]).label = $
-                  (*(*kernelresults[t]).kernels[j]).label 		; Assign the next detection the current detection label
-;                extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
-;                  STRTRIM((*(*kernelresults[t_usel]).kernels[k_array[wheremaxoverlap[0]]]).label,2)+','+$
-;                  STRTRIM(ncomarr[0],2)
-      					FOR kk=0,nwherenotmaxoverlap-1 DO BEGIN
-      						oldlabel = (*(*kernelresults[t_usel]).kernels[k_array[wherenotmaxoverlap[kk]]]).label 
-      						kernel_detect_counter += 1L										; - Increase the detection counter by 1
-      						(*(*kernelresults[t_usel]).kernels[k_array[wherenotmaxoverlap[kk]]]).label = kernel_detect_counter 		; Assign the next detection the current detection label
-      					ENDFOR
-              ; If there is only one detection overlapping, assign that detection the current label
-      				ENDIF ELSE BEGIN
-      					oldlabel = (*(*kernelresults[t_usel]).kernels[k_array[0]]).label 
+              IF (ncor EQ 1) THEN BEGIN
+                ; If there is only one detection overlapping, assign that
+                ; detection the current label 
+                oldlabel = (*(*kernelresults[t_usel]).kernels[k_array[0]]).label 
+                ; Assign the next detection the current detection label
       					(*(*kernelresults[t_usel]).kernels[k_array[0]]).label = $
-                  (*(*kernelresults[t]).kernels[j]).label 		; Assign the next detection the current detection label
+                  (*(*kernelresults[t]).kernels[j]).label 		
                 extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
                   STRTRIM((*(*kernelresults[t_usel]).kernels[k_array[0]]).label,2)+','+$
                   STRTRIM(ncomarr[0],2)
+              ENDIF ELSE BEGIN
+              ; If there is more than one detection overlapping, find out which
+              ; one has the max
+      					wheremaxoverlap = WHERE(ncomarr EQ MAX(ncomarr,/NAN),$ 
+                  COMPLEMENT=wherenotmaxoverlap,NCOMPLEMENT=nwherenotmaxoverlap)
+      					oldlabel = (*(*kernelresults[t_usel]).kernels[$
+                  k_array[wheremaxoverlap[0]]]).label 
+                ; Assign the next detection the current detection label
+      					(*(*kernelresults[t_usel]).kernels[k_array[wheremaxoverlap[0]]]).label = $
+                  (*(*kernelresults[t]).kernels[j]).label 		
+                extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
+                  STRTRIM((*(*kernelresults[t_usel]).kernels[$
+                  k_array[wheremaxoverlap[0]]]).label,2)+','+STRTRIM(ncomarr[0],2)
+      					FOR kk=0,nwherenotmaxoverlap-1 DO BEGIN
+      						oldlabel = (*(*kernelresults[t_usel]).kernels[$
+                    k_array[wherenotmaxoverlap[kk]]]).label 
+                  ; - Increase the detection counter by 1
+      						kernel_detect_counter += 1L										
+                  ; Assign the next detection the current detection label
+      						(*(*kernelresults[t_usel]).kernels[$
+                    k_array[wherenotmaxoverlap[kk]]]).label = kernel_detect_counter 		
+      					ENDFOR
       				ENDELSE
       			ENDIF ELSE $
               extraout = 'No overlap: '+STRTRIM((*(*kernelresults[t]).kernels[j]).label,2)
-;      			ENDELSE
             IF (verbose GE 1) THEN EBDETECT_TIMER, t+1, nt_loc, t0, $
               EXTRA=extraout, TOTAL_TIME=(verbose GE 2)
       		ENDFOR
       	ENDFOR
 ;      	last_kernel_detect_counter = kernel_detect_counter
 ;      	IF (verbose EQ 2) THEN STOP
+
       	;;; Check for merging events ;;;
       	IF KEYWORD_SET(params.merge_check) THEN BEGIN
-;      		PRINT,'Status: Performing merge check...'
+          IF (verbose GE 1) THEN BEGIN
+            PRINT,''
+            IF (verbose GE 2) THEN $
+              EBDETECT_FEEDBACK, /STATUS, 'Performing merge check for kernels...'
+          ENDIF
       		pass = 0L
       		totpasses = 0L
-;      		FOR t=0,nt-1 DO totpasses += LONG((*kernelresults[t]).nkernels)
+      		FOR t=0,params.nt-1 DO totpasses += LONG((*kernelresults[t]).nkernels)
       		t0 = SYSTIME(/SECONDS)
-      		FOR t_dum=0,nt_loc-1 DO BEGIN													; Loop over all but the last time step
+          ; Loop over all but the last time step
+      		FOR t_dum=0,nt_loc-1 DO BEGIN													
       			t = nt_loc-t_dum-1
-      			FOR j=0,(*kernelresults[t]).nkernels-1 DO BEGIN									; Loop over all detections at the current time step
+            ; Loop over all detections at the current time step
+      			FOR j=0,(*kernelresults[t]).nkernels-1 DO BEGIN									
       				pass += 1L
       				orig_detection = (*(*kernelresults[t]).kernels[j]).pos
       				kernel_overlapped = 0
@@ -1039,32 +1071,48 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       				ncomarr = -1
       				t_lsel = t
       				t_lbound = (t - t_skip_constraint) > 0
-      				WHILE ((kernel_overlapped EQ 0) AND (t_lsel GT t_lbound)) DO BEGIN						; Check labels and overlap
+              ; Check labels and overlap
+      				WHILE ((kernel_overlapped EQ 0) AND (t_lsel GT t_lbound)) DO BEGIN						
       					IF (t_lsel GT t_lbound) THEN t_lsel -= 1
-      					FOR k=0,(*kernelresults[t_lsel]).nkernels-1 DO BEGIN								; Loop over all detections at the next time step
+                ; Loop over all detections at the next time step
+      					FOR k=0,(*kernelresults[t_lsel]).nkernels-1 DO BEGIN								
       						comp_detection = (*(*kernelresults[t_lsel]).kernels[k]).pos
-      						ARRAY_COMPARE,orig_detection,comp_detection,/COMMON_ELEMENTS,COMMON_ARRAY=comarr,NCOMMON_ARRAY=ncomarr_val		; Find the common elements between the considered detections
-;      						position_label = ' (t,det_orig,t_comp,det_comp)=('+STRTRIM(t,2)+','+STRTRIM(j,2)+','+STRTRIM(t_lsel,2)+','+STRTRIM(k,2)+'). Single detections: '+STRTRIM(detect_counter,2)+'.'
-      						IF ((N_ELEMENTS(comarr) GE params.overlap_constraint) AND (TOTAL(comarr) NE -1)) THEN BEGIN		; If the number of common elements >= overlap constraint
-      							IF (TOTAL(k_array) EQ -1) THEN k_array = k ELSE k_array = [k_array,k]
-      							IF (TOTAL(ncomarr) EQ -1) THEN ncomarr = ncomarr_val ELSE ncomarr = [ncomarr,ncomarr_val]
+                  array_compare = EBDETECT_ARRAY_COMPARE(orig_detection, $
+                    comp_detection)
+                  ; If the number of common elements >= overlap constraint
+						      IF ((N_ELEMENTS(array_compare.common_array) GE $
+                      params.overlap_constraint) AND $
+                      (TOTAL(array_compare.common_array) NE -1)) THEN BEGIN		
+						        IF (TOTAL(k_array) NE -1) THEN $
+                      k_array = [k_array,k] $
+                    ELSE $
+                      k_array = k 
+						        IF (TOTAL(ncomarr) NE -1) THEN $
+                      ncomarr = [ncomarr,array_compare.ncommon_array] $
+                    ELSE $
+                      ncomarr = array_compare.ncommon_array 
       							kernel_overlapped = 1
       							ncor += 1
       						ENDIF
       					ENDFOR
       				ENDWHILE			
-      				IF kernel_overlapped THEN BEGIN										; If overlap occured, assign labels
+
+              ; If overlap occured, assign labels
+      				IF kernel_overlapped THEN BEGIN										
       					IF (ncor GT 1) THEN BEGIN
       						wheremaxoverlap = WHERE(ncomarr EQ MAX(ncomarr,/NAN))
       						oldlabel = (*(*kernelresults[t]).kernels[j]).label
-      						newlabel = (*(*kernelresults[t_lsel]).kernels[k_array[wheremaxoverlap[0]]]).label 
-;                  extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
-;                  STRTRIM(newlabel,2)+','+STRTRIM(ncomarr[wheremaxoverlap[0]],2)
-      						(*(*kernelresults[t]).kernels[j]).label = newlabel						;Assign the current detection the previous detection label
+      						newlabel = (*(*kernelresults[t_lsel]).kernels[$
+                    k_array[wheremaxoverlap[0]]]).label 
+                  extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
+                    STRTRIM(newlabel,2)+','+STRTRIM(ncomarr[wheremaxoverlap[0]],2)
+                  ;Assign the current detection the previous detection label
+      						(*(*kernelresults[t]).kernels[j]).label = newlabel						
       						FOR tt = t+1,nt_loc-1 DO BEGIN
       							kk = 0
       							newlabel_set = 0
-      							WHILE ((newlabel_set EQ 0) AND (kk LT (*kernelresults[tt]).nkernels-1)) DO BEGIN
+      							WHILE ((newlabel_set EQ 0) AND $
+                            (kk LT (*kernelresults[tt]).nkernels-1)) DO BEGIN
       								kk += 1	
       								IF ((*(*kernelresults[tt]).kernels[kk]).label EQ oldlabel) THEN BEGIN
       									(*(*kernelresults[tt]).kernels[kk]).label = newlabel
@@ -1074,15 +1122,19 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       						ENDFOR
       					ENDIF
       				ENDIF
-;              EBDETECT_TIMER,t_dum+1,nt,t0,EXTRA=extraout
+              IF (verbose GE 1) THEN EBDETECT_TIMER,t_dum+1,nt,t0,EXTRA=extraout, $
+                TOTAL_TIME=(verbose GE 2)
       			ENDFOR
       		ENDFOR
       	ENDIF
       ENDIF
       detpass += 1
     ENDIF ELSE BEGIN
-      PRINT,dd,detpass,' removed detection '+STRTRIM(detlabel,2)
+      IF (verbose GE 2) THEN $
+        EBDETECT_FEEDBACK, /STATUS, 'Removed detection '+STRTRIM(dd,2)+$
+          ' with label '+STRTRIM(detlabel,2)
     ENDELSE
+
     IF KEYWORD_SET(GET_KERNELS) THEN BEGIN
     	; Group kernel detections by label
       new_kernel_counter = kernel_detect_counter - last_kernel_detect_counter
@@ -1090,53 +1142,56 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     	sel_kernel_detect_idx = -1
     	t0 = SYSTIME(/SECONDS)
       lifetime_max = 0L
-    	FOR d=0L,new_kernel_counter-1 DO BEGIN											; Loop over all single detections
+      ; Loop over all single detections
+    	FOR d=0L,new_kernel_counter-1 DO BEGIN											
     		t_arr = -1
         t_real_arr = -1
     		j_arr = -1
         label_check = d+1L+last_kernel_detect_counter
-    		FOR t=0,nt_loc-1 DO BEGIN												; Loop over all time steps
-    			FOR j=0,(*kernelresults[t]).nkernels-1 DO BEGIN								; Loop over all detections at each time step
+        ; Loop over all time steps
+    		FOR t=0,nt_loc-1 DO BEGIN												
+          ; Loop over all detections at each time step
+    			FOR j=0,(*kernelresults[t]).nkernels-1 DO BEGIN								
             ; If the detection label equals the current detection counter
     				IF ((*(*kernelresults[t]).kernels[j]).label EQ label_check) THEN BEGIN					
-    					IF (TOTAL(t_arr) EQ -1) THEN BEGIN
+    					IF (TOTAL(t_arr) NE -1) THEN BEGIN
+                t_real_arr = [t_real_arr,(*kernelresults[t]).t]				
+                t_arr = [t_arr,t]
+              ENDIF ELSE BEGIN
                 t_real_arr = (*kernelresults[t]).t 
                 t_arr = t
-              ENDIF ELSE BEGIN
-                t_real_arr = [t_real_arr,(*kernelresults[t]).t]				; - Add the time step to the time step array
-                t_arr = [t_arr,t]
               ENDELSE
-    					IF (TOTAL(j_arr) EQ -1) THEN $
-                j_arr = j $
+    					IF (TOTAL(j_arr) NE -1) THEN $
+                j_arr = [j_arr,j] $
               ELSE $
-                j_arr = [j_arr,j]				; - Add the detection number for that time step to an array
+                j_arr = j 
     				ENDIF
     			ENDFOR
     		ENDFOR
-;        IF (TOTAL(t_arr) EQ -1) THEN BEGIN
-;          PRINT,'Hmm.... t_arr EQ -1...'
-;          stop
-;        ENDIF
     		nt_arr = N_ELEMENTS(t_real_arr)
-    		kernel_lifetime = t_real_arr[nt_arr-1] - t_real_arr[0] + 1									; Determine lifetime
-  ;  		; Checking lifetime constraint
-  ;  		IF (TOTAL(sel_kernel_detect_idx) EQ -1) THEN $
-  ;        sel_kernel_detect_idx = d $
-  ;      ELSE $
-  ;        sel_kernel_detect_idx = [sel_kernel_detect_idx,d]	; Add the detection label to the array of selected detections
-  ;      extra = 'Selected:    '
+        ; Determine lifetime
+    		kernel_lifetime = t_real_arr[nt_arr-1] - t_real_arr[0] + 1									
+        IF (kernel_lifetime GT kernel_lifetime_max) THEN $
+          kernel_lifetime_max = kernel_lifetime
     		kernel_det = PTRARR(nt_arr,/ALLOCATE_HEAP)
-    		FOR tt=0L,nt_arr-1 DO BEGIN											; Loop over all time steps where detection is present
-    			*kernel_det[tt] = CREATE_STRUCT('pos',(*(*kernelresults[t_arr[tt]]).kernels[j_arr[tt]]).pos)
+        ; Loop over all time steps where detection is present
+    		FOR tt=0L,nt_arr-1 DO BEGIN											
+    			*kernel_det[tt] = $
+            CREATE_STRUCT('pos',(*(*kernelresults[t_arr[tt]]).kernels[j_arr[tt]]).pos)
     		ENDFOR
-    		*kernel_detections[d] = CREATE_STRUCT('label',label_check,'t',t_real_arr,'lifetime',kernel_lifetime,$
-            'det',kernel_det)				; Write results grouped by detection with lifetime information
-  ;  		EBDETECT_TIMER, label_check, detect_counter, t0, EXTRA=extra+' d='+STRTRIM(d,2)+', nt='+$
-  ;        STRTRIM(nt_arr,2)+', t_upp='+STRTRIM(t_arr[nt_arr-1],2)+', t_low='+STRTRIM(t_arr[0],2)+$
-  ;        ', t='+STRTRIM(lifetime,2)+'. So far t_max='+STRTRIM(lifetime_max,2)
+        ; Write results grouped by detection with lifetime information
+    		*kernel_detections[d] = CREATE_STRUCT('label',label_check,$
+          't',t_real_arr,'lifetime',kernel_lifetime, 'det',kernel_det)				
+        IF (verbose GE 1) THEN $
+    		EBDETECT_TIMER, label_check, detect_counter, t0, $
+          EXTRA='d='+STRTRIM(d,2)+', nt='+$
+          STRTRIM(nt_arr,2)+', t_upp='+STRTRIM(t_arr[nt_arr-1],2)+$
+          ', t_low='+STRTRIM(t_arr[0],2)+$
+          ', t='+STRTRIM(kernel_lifetime,2)+'. So far t_max='+$
+          STRTRIM(kernel_lifetime_max,2), TOTAL_TIME=(verbose GE 2)
     	ENDFOR
       ; Add kernel detections to selected detections
-  	  IF KEYWORD_SET(GET_KERNELS) THEN BEGIN
+  	  IF KEYWORD_SET(params.get_kernels) THEN BEGIN
         *sel_detections[dd] = CREATE_STRUCT(*sel_detections[dd], 'kernel_detections', $
                 kernel_detections)
       ENDIF
@@ -1144,28 +1199,31 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       sum_kernel_detect_counter += new_kernel_counter
     ENDIF
 	ENDFOR
-	IF KEYWORD_SET(GET_KERNELS) THEN $
-     PRINT,'Final number of single kernel detections: '+STRTRIM(kernel_detect_counter,2)
+
+	IF ((verbose GE 2) AND KEYWORD_SET(params.get_kernels)) THEN $
+    EBDETECT_FEEDBACK, /STATUS, $
+      'Final number of single kernel detections: '+STRTRIM(kernel_detect_counter,2)
   replay = 0
   replay_point:
   off = [-5,-20]  ; Offset for label overlays
-	FOR t=0,nt-1 DO BEGIN													; Create mask from final selection of detections
-		IF KEYWORD_SET(VERBOSE) THEN BEGIN
+  ; Create mask from final selection of detections
+	FOR t=0,params.nt-1 DO BEGIN													
+		IF (verbose GE 2) THEN BEGIN
 	    TV,CONGRID(BYTSCL(LP_GET(sum_cube,t),/NAN),750*dataratio,750)
 			LOADCT,13,/SILENT
-			CONTOUR,CONGRID(sel_detect_mask[*,*,t],750*dataratio,750),COLOR=255, LEVELS = 1, /ISOTROPIC, $;XRANGE=[0,nx-1],$
-;              YRANGE=[0,ny-1],
-              XS=13,YS=13,POSITION=[0,0,1,1], /NORMAL, /NOERASE
-      IF (N_ELEMENTS(COMPARISON_MASK) EQ 1) THEN $
-        CONTOUR,REFORM(LP_GET(comparison_mask,t)), COLOR=200, LEVELS=1, /ISO, XS=13, YS=13, $
-                POS=[0,0,1,1], /NORMAL, /NOERASE
+			CONTOUR,CONGRID(sel_detect_mask[*,*,t],750*dataratio,750),COLOR=255, $
+        LEVELS=1, /ISOTROPIC, XS=13,YS=13,POSITION=[0,0,1,1], /NORMAL, /NOERASE
+      IF comparison_mask_exists THEN $
+        CONTOUR,REFORM(LP_GET(paramms.comparison_mask,t)), COLOR=200, LEVELS=1, /ISO, $
+          XS=13, YS=13, POS=[0,0,1,1], /NORMAL, /NOERASE
 			LOADCT,0,/SILENT
 			FOR dd=0,nsel_detections-1 DO BEGIN
 				where_detect = WHERE((*sel_detections[dd]).t EQ t, nwhere_detect)
-;				where_idx = WHERE(sel_detect_idx EQ (*(*results[t]).structs[j]).label, nwhere_idx)
 				IF ((TOTAL(where_detect) NE -1) AND (nwhere_detect EQ 1)) THEN BEGIN
-					xyout_pos = ARRAY_INDICES(mask,((*(*sel_detections[dd]).det[where_detect[0]]).pos)[0])+off
-					XYOUTS,xyout_pos[0]/FLOAT(nx),xyout_pos[1]/FLOAT(ny),STRTRIM((*sel_detections[dd]).label,2),$
+					xyout_pos = ARRAY_INDICES(mask,$
+            ((*(*sel_detections[dd]).det[where_detect[0]]).pos)[0])+off
+					XYOUTS,xyout_pos[0]/FLOAT(nx),xyout_pos[1]/FLOAT(ny),$
+            STRTRIM((*sel_detections[dd]).label,2),$
             COLOR=255, /NORMAL, CHARSIZE=2
 				ENDIF
 			ENDFOR
@@ -1173,8 +1231,12 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 		ENDIF
 		IF (verbose EQ 2) THEN WAIT,0.5
 	ENDFOR
-	IF (verbose EQ 3) THEN STOP
-  IF (replay EQ 1) THEN GOTO,replay_point
+	IF (verbose EQ 3) THEN BEGIN
+    ans = ''
+    READ, ans, PROMPT='Do you wish to replay the movie? [Y/N]'
+    IF (STRUPCASE(ans) EQ 'Y') THEN GOTO,replay_point
+    STOP
+  ENDIF
 
 
 ;================================================================================
