@@ -730,9 +730,9 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 	IF (verbose EQ 3) THEN STOP
 
 ;================================================================================
-;========================= Group detections by label ============================
+;============== Group detections and apply lifetime constraints =================
 ;================================================================================
-	; Group detections by label
+	; Group detections by label AKA determine lifetimes
 	detections = PTRARR(detect_counter,/ALLOCATE_HEAP)
 	sel_detect_idx = -1
 	t0 = SYSTIME(/SECONDS)
@@ -741,84 +741,94 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 		t_arr = -1
 		j_arr = -1
     label_check = d+1L
-    IF (N_ELEMENTS(LIMIT_GROUP_SEARCH) EQ 1) THEN BEGIN
+    IF (params.limit_group_search NE 0) THEN BEGIN
       ; Find first occurrence of current detection counter
       t_first = -1L
       t=0L
       WHILE (t_first EQ -1) DO BEGIN
-			  FOR j=0,(*results[t]).ndetect-1 DO BEGIN								; Loop over all detections at each time step
-;				  IF (label_check EQ (*(*results[t]).structs[j]).label) THEN t_first = t ; If the detection label equals the current detection counter
-				  IF ((*(*results[t]).structs[j]).label EQ label_check) THEN t_first = t ; If the detection label equals the current detection counter
+        ; Loop over all detections at each time step
+			  FOR j=0,(*results[t]).ndetect-1 DO BEGIN								
+          ; If the detection label equals the current detection counter
+				  IF ((*(*results[t]).structs[j]).label EQ label_check) THEN t_first = t 
         ENDFOR
         t += 1L
-;        IF (t EQ nt-1) THEN BEGIN
-;          t_first = t_first_last
-;          PRINT,'Hmmm....'
-;          STOP
-;        ENDIF
       ENDWHILE
       t_first_last = t_first
-      t_low = t_first - LONG(limit_group_search/2.)
+      t_low = t_first - LONG(params.limit_group_search/2.)
       IF (t_low LT 0) THEN BEGIN
         t_low = 0L
-        t_upp = LONG(limit_group_search)
+        t_upp = LONG(params.limit_group_search)
       ENDIF ELSE BEGIN
-        t_upp = t_first + LONG(limit_group_search/2.)
+        t_upp = t_first + LONG(params.limit_group_search/2.)
         IF (t_upp GT (nt-1)) THEN BEGIN
           t_upp = LONG(nt)-1L
-          t_low = t_upp - LONG(limit_group_search)
+          t_low = t_upp - LONG(params.limit_group_search)
         ENDIF
       ENDELSE
     ENDIF ELSE BEGIN
       t_low = 0L
       t_upp = LONG(nt)-1L
     ENDELSE
-		FOR t=t_low,t_upp DO BEGIN												; Loop over all time steps
-			FOR j=0,(*results[t]).ndetect-1 DO BEGIN								; Loop over all detections at each time step
-;				IF (label_check EQ (*(*results[t]).structs[j]).label) THEN BEGIN					; If the detection label equals the current detection counter
-				IF ((*(*results[t]).structs[j]).label EQ label_check) THEN BEGIN					; If the detection label equals the current detection counter
-;					print,label_check,t,j,(*(*results[t]).structs[j]).label
-					IF (TOTAL(t_arr) EQ -1) THEN t_arr = t ELSE t_arr = [t_arr,t]				; - Add the time step to the time step array
-					IF (TOTAL(j_arr) EQ -1) THEN j_arr = j ELSE j_arr = [j_arr,j]				; - Add the detection number for that time step to an array
-;					*det[j] = CREATE_STRUCT('pos',(*(*results[t]).structs[j]).pos)
-;					IF (d NE 0) THEN t_comp = (*detections[d-1]).t ELSE t_comp = -1
-;					IF (TOTAL(t_comp) EQ -1) THEN t_arr = t ELSE t_arr = [(*detections[d-1]).t,t]
-;					*detections[d] = CREATE_STRUCT('label',(*(*results[t]).structs[j]).label,'t',t_arr);,'det',det)
+    ; Loop over all time steps
+		FOR t=t_low,t_upp DO BEGIN												
+      ; Loop over all detections at each time step
+			FOR j=0,(*results[t]).ndetect-1 DO BEGIN								
+        ; If the detection label equals the current detection counter
+				IF ((*(*results[t]).structs[j]).label EQ label_check) THEN BEGIN					
+          ; Add the time step to the time step array
+					IF (TOTAL(t_arr) NE -1) THEN $
+            t_arr = [t_arr,t] $
+          ELSE $
+            t_arr = t
+          ; - Add the detection number for that time step to an array
+					IF (TOTAL(j_arr) NE -1) THEN $
+            j_arr = [j_arr,j] $	
+          ELSE $
+            j_arr = j 
 				ENDIF
 			ENDFOR
 		ENDFOR
-;    IF (TOTAL(t_arr) EQ -1) THEN BEGIN
-;      PRINT,'Hmm.... t_arr EQ -1...'
-;      stop
-;    ENDIF
 		nt_arr = N_ELEMENTS(t_arr)
 		lifetime = t_arr[nt_arr-1] - t_arr[0] + 1									; Determine lifetime
     IF (lifetime GT lifetime_max) THEN lifetime_max = lifetime
 		; Checking lifetime constraint
-		IF ((lifetime GE min_lifetime) AND (lifetime LE max_lifetime)) THEN BEGIN									; If the detections lifetime >= lifetime constraint
-			IF (TOTAL(sel_detect_idx) EQ -1) THEN sel_detect_idx = d ELSE sel_detect_idx = [sel_detect_idx,d]	; Add the detection label to the array of selected detections
+    ; If the detections lifetime >= lifetime constraint
+		IF ((lifetime GE min_lifetime) AND (lifetime LE max_lifetime)) THEN BEGIN		
+      ; Add the detection label to the array of selected detections
+			IF (TOTAL(sel_detect_idx) NE -1) THEN $
+        sel_detect_idx = [sel_detect_idx,d]	$
+      ELSE $
+        sel_detect_idx = d 
       extra = 'Selected:    '
 		ENDIF ELSE extra = 'Not selected:'
 		det = PTRARR(nt_arr,/ALLOCATE_HEAP)
-		FOR tt=0L,nt_arr-1 DO BEGIN											; Loop over all time steps where detection is present
+    ; Loop over all time steps where detection is present
+		FOR tt=0L,nt_arr-1 DO $
 			*det[tt] = CREATE_STRUCT('pos',(*(*results[t_arr[tt]]).structs[j_arr[tt]]).pos)
-		ENDFOR
-		*detections[d] = CREATE_STRUCT('label',label_check,'t',t_arr,'lifetime',lifetime,'det',det)				; Write results grouped by detection with lifetime information
+    ; Write results grouped by detection with lifetime information
+		*detections[d] = CREATE_STRUCT('label',label_check,'t',t_arr,$
+      'lifetime',lifetime,'det',det)				
 		IF (verbose GE 1) THEN $
-      EBDETECT_TIMER, label_check, detect_counter, t0, EXTRA=extra+' d='+STRTRIM(d,2)+', nt='+$
-      STRTRIM(nt_arr,2)+', t_upp='+STRTRIM(t_arr[nt_arr-1],2)+', t_low='+STRTRIM(t_arr[0],2)+$
-      ', t='+STRTRIM(lifetime,2)+'. So far t_max='+STRTRIM(lifetime_max,2), $
-      TOTAL_TIME=(verbose GE 2)
+      EBDETECT_TIMER, label_check, detect_counter, t0, $
+        EXTRA=extra+' d='+STRTRIM(d,2)+', nt='+$
+        STRTRIM(nt_arr,2)+', t_upp='+STRTRIM(t_arr[nt_arr-1],2)+$
+        ', t_low='+STRTRIM(t_arr[0],2)+$
+        ', t='+STRTRIM(lifetime,2)+'. So far t_max='+STRTRIM(lifetime_max,2), $
+        TOTAL_TIME=(verbose GE 2)
 	ENDFOR
-  PRINT,''
-	PRINT,'sel_detect_idx: ',sel_detect_idx
-	PRINT,'Final number of detections after lifetime constraint: '+STRTRIM(N_ELEMENTS(sel_detect_idx),2)
-	IF (verbose EQ 3) THEN STOP
+  IF (verbose GE 2) THEN BEGIN
+    PRINT,''
+    EBDETECT_FEEDBACK, /STATUS, $
+	    'Final number of detections after lifetime constraint: '+$
+      STRTRIM(N_ELEMENTS(sel_detect_idx),2)
+    EBDETECT_FEEDBACK, /STATUS, $
+      'Detection indices: ['+STRJOIN(sel_detect_idx,',')+']'
+	  IF (verbose EQ 3) THEN STOP
+  ENDIF
 	
 ;================================================================================
-;========================= Apply lifetime constraints ===========================
+;===================== Get kernels and remove detections ========================
 ;================================================================================
-	; Applying lifetime constraint
 	nsel_detections_orig = N_ELEMENTS(sel_detect_idx)
   nremove_detections = N_ELEMENTS(REMOVE_DETECTIONS)
   nsel_detections = nsel_detections_orig - nremove_detections
