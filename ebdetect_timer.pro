@@ -88,7 +88,7 @@ PRO EBDETECT_TIMER, pass, npass, t0, EXTRA_OUTPUT=extra_output, $
         PRINT, ' done!'
     ENDIF
     IF KEYWORD_SET(TOTAL_TIME) THEN $
-      MESSAGE,' Total time: '+STRTRIM((totalsectime),2), /INFO
+      PRINT,' Total time: '+STRTRIM((totalsectime),2)
   ENDIF
 
 END
