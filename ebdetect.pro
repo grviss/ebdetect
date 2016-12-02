@@ -351,7 +351,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 		IF (verbose GE 2) THEN BEGIN
       feedback_txt = 'Applying intensity thresholding.'
       EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
-      WINDOW, XSIZE=512*dataratio, YSIZE=512
+      WINDOW, XSIZE=750*dataratio, YSIZE=750, $
+        TITLE='EBDETECT: Intensity thresholding'
     ENDIF
 		t0 = SYSTIME(/SECONDS)
 		FOR t=0L,params.nt-1 DO BEGIN
@@ -545,7 +546,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 			k_array = -1
 			ncomarr = -1
 			t_usel = t
-			t_ubound = (t + t_skip_constraint) < (params.nt-1)
+			t_ubound = (t + params.t_skip_constraint) < (params.nt-1)
 			WHILE ((overlapped EQ 0) AND (t_usel LT t_ubound)) DO BEGIN
 				IF (t_usel LT t_ubound) THEN t_usel += 1
         ; Loop over all detections at the next time step
@@ -645,7 +646,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 				k_array = -1
 				ncomarr = -1
 				t_lsel = t
-				t_lbound = (t - t_skip_constraint) > 0
+				t_lbound = (t - params.t_skip_constraint) > 0
         ; Check labels and overlap
 				WHILE ((overlapped EQ 0) AND (t_lsel GT t_lbound)) DO BEGIN						
 					IF (t_lsel GT t_lbound) THEN t_lsel -= 1
@@ -741,12 +742,13 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 		IF (verbose GE 2) THEN BEGIN
       feedback_txt = 'Writing interim detection results.'
       EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
-			WINDOW,XSIZE=750*dataratio,YSIZE=750
+			WINDOW,XSIZE=750*dataratio,YSIZE=750, $
+        TITLE='EBDETECT: Continuity constraints'
 		ENDIF
     ; Define cube to be saved if not writing in place
 		IF (KEYWORD_SET(params.write_detect_overlap) AND $
         KEYWORD_SET(params.write_mask)) THEN BEGIN
-      IF ~KEYWORD_SET(params.write_inplae) THEN $
+      IF ~KEYWORD_SET(params.write_inplace) THEN $
         overlap_mask_cube = BYTARR(params.nx,params.ny,params.nt)
     ENDIF
     ; Loop over time and display results and/or write results to disk
@@ -900,7 +902,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 	    'Final number of detections after lifetime constraint: '+$
       STRTRIM(N_ELEMENTS(sel_detect_idx),2)
     EBDETECT_FEEDBACK, /STATUS, $
-      'Detection indices: ['+STRJOIN(sel_detect_idx,',')+']'
+      'Detection indices: ['+STRJOIN(STRTRIM(sel_detect_idx,2),',')+']'
 	  IF (verbose EQ 3) THEN STOP
   ENDIF
 	
@@ -919,7 +921,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 	IF (verbose GE 2) THEN BEGIN
     feedback_txt1 = 'Constructing final detection output.'
     EBDETECT_FEEDBACK, feedback_txt1+'..', /STATUS
-		WINDOW,XSIZE=750*dataratio,YSIZE=750
+		WINDOW,XSIZE=750*dataratio,YSIZE=750, $
+      TITLE='EBDETECT: Lifetime constraints'
 		PLOT,INDGEN(params.nx),INDGEN(params.ny),POS=[0,0,1,1],XRANGE=[0,nx-1],$
       YRANGE=[0,ny-1],/XS,/YS,/NODATA
 	ENDIF
@@ -941,7 +944,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 ;    print,dd,detpass,detlabel
     ; Compare the detection label with those of the detections to be removed
     IF (nremove_detections GE 1) THEN $
-      whereremove = WHERE(remove_detections EQ detlabel) $
+      whereremove = WHERE(params.remove_detections EQ detlabel) $
     ELSE $
       whereremove = -1
     IF (whereremove[0] EQ -1) THEN BEGIN
@@ -1059,7 +1062,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       			k_array = -1      ; kernel index array
       			ncomarr = -1      ; array with number of common elements
       			t_usel = t
-      			t_ubound = (t + t_skip_constraint) < (nt_loc-1)
+      			t_ubound = (t + params.t_skip_constraint) < (nt_loc-1)
       			WHILE ((kernel_overlapped EQ 0) AND (t_usel LT t_ubound)) DO BEGIN
       				IF (t_usel LT t_ubound) THEN t_usel += 1
               ; Loop over all detections at the next time step
@@ -1154,7 +1157,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       				k_array = -1
       				ncomarr = -1
       				t_lsel = t
-      				t_lbound = (t - t_skip_constraint) > 0
+      				t_lbound = (t - params.t_skip_constraint) > 0
               ; Check labels and overlap
       				WHILE ((kernel_overlapped EQ 0) AND (t_lsel GT t_lbound)) DO BEGIN						
       					IF (t_lsel GT t_lbound) THEN t_lsel -= 1
