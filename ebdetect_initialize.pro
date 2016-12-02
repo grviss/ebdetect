@@ -100,7 +100,6 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
         ; Check which tag the current parsed_line.field corresponds to
         wheretag = WHERE(STRLOWCASE(TAG_NAMES(result_orig)) EQ $
           STRLOWCASE(parsed_line.field), count)
-        IF (parsed_line.field EQ 'SIGMA_CONSTRAINT') THEN STOP
         IF (count EQ 1) THEN BEGIN
           CASE dtypes[wheretag] OF
             1:  value = BYTE(parsed_line.value)
