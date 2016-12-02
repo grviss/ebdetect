@@ -146,7 +146,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   dataratio = params.nx/FLOAT(params.ny)
   ; Lifetime thresholds
   min_lifetime = params.lifetime_constraint[0]
-  max_lifetime = nt
+  max_lifetime = params.nt
 	IF (N_ELEMENTS(params.lifetime_constraint) EQ 2) THEN $
     max_lifetime = params.lifetime_constraint[1] $
   ELSE $
