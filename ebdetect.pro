@@ -81,21 +81,29 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     params.inputdir += PATH_SEP()
   IF (STRMID(params.outputdir,0,1,/REVERSE) NE PATH_SEP()) THEN $
     params.outputdir += PATH_SEP()
+  ; Set summed cube file names
+  IF KEYWORD_SET(params.sum_cube) THEN BEGIN
+    wsum_cube_filename = params.inputfile 
+    full_wsum_cube_filename = params.inputdir + wsum_cube_filename 
+  ENDIF ELSE BEGIN
+    wsum_cube_filename = 'wsum_'+FILE_BASENAME(params.inputfile)
+    full_wsum_cube_filename = params.outputdir + wsum_cube_filename 
+  ENDELSE
+  lcsum_cube_filename = 'lcsum_'+FILE_BASENAME(params.inputfile)
   ; Check existence of input files
   inputfile_exists = 0
   wsum_cube_exists = 0
   lcsum_cube_exists= 0
   detect_init_file_exists = 0
   comparison_mask_exists = 0
+  wsum_cube_exists = FILE_TEST(full_wsum_cube_filename)
   IF (params.inputfile NE '') THEN BEGIN
     IF (params.sum_cube EQ 0) THEN BEGIN
       inputfile_exists = FILE_TEST(params.inputdir+params.inputfile)
       IF inputfile_exists THEN BEGIN
         ; Get input file dimensions
       	LP_HEADER,params.inputdir+params.inputfile, NX=nx, NY=ny, NT=imnt 
-    	  params.nt = imnt/params.nlp
-        params.nx = nx
-        params.ny = ny
+    	  nt = imnt/params.nlp
       ENDIF ELSE BEGIN
         EBDETECT_FEEDBACK, /ERROR, /TERMINATE, $
           'No inputfile '+params.inputfile+' exists in directory '+$
@@ -103,13 +111,12 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
         RETURN 
       ENDELSE
     ENDIF ELSE BEGIN
-      wsum_cube_exists = FILE_TEST(params.inputdir + params.sum_cube)
       IF wsum_cube_exists THEN $
-        LP_HEADER, params.inputdir+params.sum_cube, NX=nx, NY=ny, NT=nt  $
+        LP_HEADER, full_wsum_cube_filename, NX=nx, NY=ny, NT=nt  $
       ELSE BEGIN
         EBDETECT_FEEDBACK, /ERROR, /TERMINATE, $
-          'No inputfile '+params.sum_cube+' exists in directory '+$
-          params.inputdir
+          'No inputfile '+FILE_BASENAME(full_wsum_cube_filename)+' exists in directory '+$
+          FILE_DIRNAME(full_wsum_cube_filename)
         RETURN 
       ENDELSE
     ENDELSE
@@ -119,8 +126,13 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       ' Please check your input in '+ConfigFile+'.'
     RETURN
   ENDELSE
+  params.nx = nx
+  params.ny = ny
+  params.nt = nt
   IF (params.lcsum_cube NE '') THEN $
-    lcsum_cube_exists = FILE_TEST(params.inputdir + params.lcsum_cube)
+    lcsum_cube_exists = FILE_TEST(params.inputdir + params.lcsum_cube) $
+  ELSE $
+    lcsum_cube_exists = FILE_TEST(params.outputdir + lcsum_cube_filename)
 	IF (params.detect_init_file NE '') THEN detect_init_file_exists = $
     FILE_TEST(params.outputdir + params.detect_init_file)
   IF (params.comparison_mask NE '') THEN $
@@ -181,15 +193,12 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       '> Creating summed wing cube...'
     EBDETECT_MAKE_SUMCUBE, params.inputdir+params.inputfile, $
       params.wsum_pos, NLP=params.nlp, $
-      OUTPUTFILENAME=params.outputdir+'wsum_'+FILE_BASENAME(params.inputfile), $
+      OUTPUTFILENAME=params.outputdir+wsum_cube_filename, $
       WRITE_INPLACE=params.write_inplace, OUTDIR=params.outputdir
+    sum_cube = params.outputdir+wsum_cube_filename
     IF (verbose GE 2) THEN EBDETECT_FEEDBACK, /STATUS, /DONE
-  ENDIF ELSE BEGIN
-    IF KEYWORD_SET(params.sum_cube) THEN $
-      sum_cube = params.inputdir+params.inputfile $
-    ELSE $
-      sum_cube = params.outputdir+'wsum_'+FILE_BASENAME(params.inputfile)
-  ENDELSE
+  ENDIF ELSE $
+    sum_cube = full_wsum_cube_filename
      
   ; Create summed "line-center" cube if multiple positions around line center
   ; are given
@@ -241,7 +250,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
           ENDFOR
           running_mean_summed_cube[t] = MEAN(tmp_mean_summed_cube, /DOUBLE ,/NAN)
           ; Determine the standard deviation in the cube
-          IF ~KEYWORD_SET(FACTOR_SIGMA) THEN $
+          IF ~KEYWORD_SET(params.factor_sigma) THEN $
       		  running_sdev[t] = STDDEV(DOUBLE(tmp_mean_summed_cube),/NAN) 
           IF (verbose GE 1) THEN $
             EBDETECT_TIMER,t+1,params.nt,t0, /DONE, TOTAL_TIME=(verbose GE 2), $
@@ -254,16 +263,14 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       ENDIF ELSE RESTORE, params.running_mean, VERBOSE=(verbose GT 1)
     ENDIF ELSE BEGIN
       ; Read in summed wing cube
-  		IF KEYWORD_SET(params.sum_cube) THEN BEGIN
-        summed_cube = FLTARR(params.nx,params.ny,params.nt)
-        t0 = SYSTIME(/SECONDS)
-        FOR t=0,params.nt-1 DO BEGIN
-          summed_cube[*,*,t] = LP_GET(sum_cube,t)
-          IF (verbose GE 1) THEN EBDETECT_TIMER,t+1,params.nt,t0, /DONE, $
-            EXTRA_OUTPUT='Getting summed wing cube in memory...', $
-            TOTAL_TIME=(verbose GE 2)
-        ENDFOR
-      ENDIF
+      summed_cube = FLTARR(params.nx,params.ny,params.nt)
+      t0 = SYSTIME(/SECONDS)
+      FOR t=0,params.nt-1 DO BEGIN
+        summed_cube[*,*,t] = LP_GET(sum_cube,t)
+        IF (verbose GE 1) THEN EBDETECT_TIMER,t+1,params.nt,t0, /DONE, $
+          EXTRA_OUTPUT='Getting summed wing cube in memory...', $
+          TOTAL_TIME=(verbose GE 2)
+      ENDFOR
       ; Select only pixels as defined by REGION_THRESHOLD
       IF (N_ELEMENTS(params.region_threshold) GE 1) THEN BEGIN
         IF (N_ELEMENTS(params.region_threshold) EQ 4) THEN $
@@ -287,7 +294,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
         ENDELSE
       ENDIF ELSE $
         sel_summed_cube = summed_cube
-      IF ~KEYWORD_SET(FACTOR_SIGMA) THEN $
+      IF ~KEYWORD_SET(params.factor_sigma) THEN $
         ; Determine the standard deviation in the cube
   		  sdev = STDDEV(DOUBLE(sel_summed_cube),/NAN) 
       ; Determine the average of the cube
@@ -298,7 +305,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     IF KEYWORD_SET(params.lc_constraint) THEN BEGIN
       lc_summed_cube = FLTARR(params.nx,params.ny,params.nt)
       IF lcsum_cube_exists THEN $
-        FOR t=0,params.nt-1 DO lc_summed_cube[0,0,t] = LP_GET(lc_sum_cube,t) $
+        FOR t=0,params.nt-1 DO lc_summed_cube[0,0,t] = LP_GET(lcsum_cube,t) $
       ELSE BEGIN
         FOR t=0,params.nt-1 DO $
           lc_summed_cube[0,0,t] = LP_GET(inputfile,t*nlp+params.lcsum_pos)
@@ -314,9 +321,9 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
             lc_selpix = WHERE(LP_GET(params.region_threshold,t) EQ 1, count)
             IF (count NE 0) THEN BEGIN
               IF (t EQ 0) THEN $
-                sel_lc_summed_cube = [(LP_GET(lc_sum_cube,t))[lc_selpix]] $
+                sel_lc_summed_cube = [(LP_GET(lcsum_cube,t))[lc_selpix]] $
               ELSE $
-                sel_lc_summed_cube = [sel_lc_summed_cube, (LP_GET(lc_sum_cube,t))[lc_selpix]]
+                sel_lc_summed_cube = [sel_lc_summed_cube, (LP_GET(lcsum_cube,t))[lc_selpix]]
             ENDIF
             IF (verbose GE 1) THEN $
               EBDETECT_TIMER,t+1,params.nt,t0, /DONE, TOTAL_TIME=(verbose GE 2), $
@@ -370,7 +377,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       ; Process line center condition, i.e., I < lc_threshold
       IF KEYWORD_SET(params.lc_constraint) THEN BEGIN
         IF lcsum_cube_exists THEN $
-          select_lc_cube = LP_GET(lc_sum_cube,t) $
+          select_lc_cube = LP_GET(lcsum_cube,t) $
         ELSE $
           select_lc_cube = LP_GET(inputfile,t*nlp+params.lcsum_pos)
         lc_threshold = mean_lc_cube + params.lc_sigma[0]*sdev_lc_cube
