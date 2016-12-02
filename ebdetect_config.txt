@@ -148,25 +148,26 @@ KERNEL_SIZE = 5
 ################################################################################
 ################################ OUTPUT SWITCHES ###############################
 ################################################################################
-# optional: write a mask cube with all initial detections
+# optional: write a mask cubes. Combines with WRITE_DETECT_INIT,
+# WRITE_DETECT_OVERLAP and WRITE_DETECT_FINAL.
 # Defaults: 1 (= yes)
-WRITE_MASK_CUBE = 1
+WRITE_MASK = 1
 
-# optional: write a data file with all initial detections (post-intensity
+# optional: write results of all initial detections (post-intensity
 # thresholding, prior to all other limiting constraints and merging/splitting
 # checks)
 # Defaults: 1 (= yes)
 WRITE_DETECT_INIT = 1
 
-# optional: write a data file with only those detections that overlap within
+# optional: write results with only those detections that overlap within
 # lifetime_constraint frames
 # Defaults: 1 (= yes)
 WRITE_DETECT_OVERLAP = 1
 
-# optional: write a mask cube with detections surviving all limiting constraints
-# and accounting for merging/splitting
+# optional: write results with detections surviving all limiting constraints and
+# accounting for merging/splitting
 # Defaults: 1 (= yes)
-WRITE_FINAL_MASK_CUBE = 1
+WRITE_DETECT_FINAL = 1
 
 # optional: write output cubes in place (using LP_PUT) or not (using LP_WRITE).
 # Defaults: 1 (= yes)

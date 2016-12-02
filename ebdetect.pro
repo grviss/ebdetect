@@ -235,7 +235,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
                         FILE_BASENAME(sum_cube)+'_running_mean_sdev.idlsave'
   			SAVE, running_mean_summed_cube, running_sdev, $
           FILENAME=params.outputdir+outputfilename
-        EBDETECT_FEEDBACK, /SATUS, 'Written: '+outputfilename
+        EBDETECT_FEEDBACK, /SATUS, 'Written: '+params.outputdir+outputfilename
       ENDIF ELSE RESTORE, params.running_mean, VERBOSE=(verbose GT 1)
     ENDIF ELSE BEGIN
       ; Read in summed wing cube
@@ -723,7 +723,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
 			WINDOW,XSIZE=750*dataratio,YSIZE=750
 		ENDIF
-		IF KEYWORD_SET(params.write_detect_overlap) THEN BEGIN
+		IF (KEYWORD_SET(params.write_detect_overlap) AND $
+        KEYWORD_SET(params.write_mask)) THEN BEGIN
       IF ~KEYWORD_SET(params.write_inplae) THEN $
         overlap_mask_cube = BYTARR(params.nx,params.ny,params.nt)
 			outputfilename='overlap_mask_stdev'+$
@@ -754,7 +755,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 				XYOUTS,10.,10.,'All detections at t='+STRTRIM(t,2),/DATA,COLOR=255,CHARSIZE=2
 				WAIT,0.05
 			ENDIF
-			IF KEYWORD_SET(params.write_detect_overlap) THEN BEGIN
+			IF (KEYWORD_SET(params.write_detect_overlap) AND $
+          KEYWORD_SET(params.write_mask)) THEN BEGIN
         IF KEYWORD_SET(params.write_inplace) THEN $
           LP_PUT, mask, params.outputdir+outputfilename, t, nt=params.nt, $
             KEEP_OPEN=(t NE params.nt-1) $
@@ -762,7 +764,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
           overlap_mask_cube[*,*,t] = mask
       ENDIF
 		ENDFOR
-		IF KEYWORD_SET(params.write_detect_overlap) THEN BEGIN
+		IF (KEYWORD_SET(params.write_detect_overlap) AND $
+        KEYWORD_SET(params.write_mask)) THEN BEGIN
       IF  ~KEYWORD_SET(params.write_inplace) THEN $
   			LP_WRITE, overlap_mask_cube, params.outputdir+outputfilename
       EBDETECT_FEEDBACK, /STATUS,'Written: '+params.outputdir+outputfilename
@@ -1302,37 +1305,44 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 ;================================================================================
 ;============================== Write final results =============================
 ;================================================================================
-	IF KEYWORD_SET(WRITE_FINAL_MASK_CUBE) THEN BEGIN
-		outputfilename='./final_mask_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
-                      FILE_BASENAME(sum_cube)
-		LP_WRITE,sel_detect_mask, outputfilename
-		PRINT,'Written: '+outputfilename
-		outputfilename='./detect_eb_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
-                      FILE_BASENAME(sum_cube)+'_final.save'
-		SAVE,sel_detections,nsel_detections,filename=outputfilename
-		PRINT,'Written: '+outputfilename
-    IF KEYWORD_SET(GET_KERNELS) THEN BEGIN
-  		outputfilename='./final_kernelmask_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
-                        FILE_BASENAME(sum_cube)
-  		LP_WRITE,sel_kernel_mask, outputfilename
-  		PRINT,'Written: '+outputfilename
+	IF KEYWORD_SET(params.write_detect_final) THEN BEGIN
+    IF (verbose GE 2) THEN BEGIN
+      feedback_txt = 'Writing final results.'
+      EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
     ENDIF
+    ; Write IDL save file
+		outputfilename='detect_eb_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
+                      FILE_BASENAME(sum_cube)+'_final.idlsave'
+		SAVE,sel_detections,nsel_detections,filename=params.outputdir+outputfilename
+		EBDETECT_FEEDBACK, '> Written: '+params.outputdir+outputfilename
+    IF KEYWORD_SET(params.write_mask) THEN BEGIN
+  		outputfilename='final_mask_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
+                        FILE_BASENAME(sum_cube)
+  		LP_WRITE,sel_detect_mask, params.outputdir+outputfilename
+  		EBDETECT_FEEDBACK,'> Written: '+params.outputdir+outputfilename
+      IF KEYWORD_SET(params.get_kernels) THEN BEGIN
+  	  	outputfilename='final_kernelmask_stdev'+$
+          STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
+          FILE_BASENAME(sum_cube)
+  	  	LP_WRITE,sel_kernel_mask, params.outputdir+outputfilename
+  	  	EBDETECT_FEEDBACK, '> Written: '+params.outputdir+outputfilename
+      ENDIF
+    ENDIF
+    IF (verbose GE 2) THEN $
+      EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
 	ENDIF
 
 ;================================================================================
 ;=========================== Output final statistics ============================
 ;================================================================================
-  PRINT,'Detection statistics:'
-  PRINT,'# after intensity & size thresholds: '+STRTRIM(totnlabels,2)
-	PRINT,'# after continuity constraints:      '+STRTRIM(detect_counter,2)
-	PRINT,'# after lifetime constraint:         '+STRTRIM(N_ELEMENTS(sel_detect_idx),2)
+  EBDETECT_FEEDBACK, 'Detection statistics:'
+  EBDETECT_FEEDBACK, '# after intensity & size thresholds: '+STRTRIM(totnlabels,2)
+	EBDETECT_FEEDBACK, '# after continuity constraints:      '+STRTRIM(detect_counter,2)
+	EBDETECT_FEEDBACK, '# after lifetime constraint:         '+STRTRIM(N_ELEMENTS(sel_detect_idx),2)
 	IF KEYWORD_SET(GET_KERNELS) THEN $
-    PRINT,'# of kernels:                        '+STRTRIM(kernel_detect_counter,2)
+    EBDETECT_FEEDBACK, '# of kernels:                        '+STRTRIM(kernel_detect_counter,2)
 
+  EBDETECT_FEEDBACK, /DONE
 	IF (verbose EQ 3) THEN STOP
-;	IF KEYWORD_SET(WRITE_MASK_CUBE) THEN BEGIN
-;		LP_WRITE, mask_cube, './mask_'+FILE_BASENAME(inputfile)
-;		PRINT,'Written: ./mask_'+FILE_BASENAME(inputfile)
-;	ENDIF
 
 END

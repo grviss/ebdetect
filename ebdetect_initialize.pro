@@ -67,8 +67,8 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
     ; Switches
     sum_cube:0B, factor_sigma:1B, double_set:1B, get_kernels:0B, $
     lc_constraint:0B, pad:1B, merge_check:1B, split_check:1B, $
-    write_mask_cube:1B, write_detect_init:1B, write_detect_overlap:1B, $
-    write_final_mask_cube:1B, write_inplace:1B, $
+    write_detect_init:1B, write_detect_overlap:1B, write_detect_final:1B, $
+    write_mask:1B, write_inplace:1B, $
     exit_status:0B }
   dtypes = BYTARR(N_ELEMENTS(TAG_NAMES(result)))
   FOR i=0,N_ELEMENTS(dtypes)-1 DO dtypes[i] = SIZE(result.(i), /TYPE)
