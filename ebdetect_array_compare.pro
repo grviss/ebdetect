@@ -70,6 +70,8 @@ FUNCTION EBDETECT_ARRAY_COMPARE, Array1, Array2, VERBOSE=verbose
 	i = 0L
 	j = 0L
 	common_array = -1
+  index_array1 = -1
+  index_array1 = -1
 	WHILE ((i LT narray1) AND (j LT narray2)) DO BEGIN
 		IF (array1[i] EQ array2[j]) THEN BEGIN
 			IF (common_array[0] NE -1) THEN BEGIN
