@@ -4,7 +4,8 @@
 ;
 ; PURPOSE:
 ;	  This routine is meant for Ellerman bomb detection, but detects anything
-;   above a certain intensity and size threshold given the input parameters.
+;   above a certain intensity threshold and abiding by size and lifetime
+;   constraints.
 ;
 ; CATEGORY:
 ;   Data analysis
@@ -27,6 +28,9 @@
 ;                   2 = as 1, plus interim status reports, feedback movies and
 ;                       detection statistics
 ;                   3 = as 2, plus stopping in between major steps for debugging
+;                   Defaults to 0.
+;   NO_PLOT     - Set if plots should be suppressed. Has no effect unless
+;                 VERBOSE is set to 2 or higher. Defaults to 0.
 ;
 ; OUTPUTS:
 ;   Depending on the switches set in the configuration file, the code will
@@ -55,9 +59,10 @@
 ;   2016 Sep 16 GV: Imported current version into CVS
 ;   2016 Nov 30 GV: Cleaned away all input keywords that are now populated from
 ;                   the configuration file and updated handling of input keywords
+;   2016 Dec 02 GV: Version 1.0 
 ;-
 ;
-PRO EBDETECT, ConfigFile, VERBOSE=verbose 
+PRO EBDETECT, ConfigFile, VERBOSE=verbose, NO_PLOT=no_plot
 
 ;============================================================================== 
 
@@ -357,7 +362,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       t_init = SYSTIME(/SECONDS)
       feedback_txt = 'Applying intensity thresholding.'
       EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
-      WINDOW, XSIZE=750*dataratio, YSIZE=750, $
+      IF ~KEYWORD_SET(NO_PLOT) THEN $
+        WINDOW, XSIZE=750*dataratio, YSIZE=750, $
         TITLE='EBDETECT: Intensity thresholding'
     ENDIF
 		t0 = SYSTIME(/SECONDS)
@@ -468,7 +474,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 						  'Something is very wrong here... '+$
               STRTRIM(nstruct_pix,2)+' NE '+STRTRIM(nlabels_pix,2)
           ENDELSE
-					IF (verbose GE 2) THEN $
+					IF ((verbose GE 2) AND ~KEYWORD_SET(NO_PLOT)) THEN $
             TVSCL,CONGRID(labels,512*dataratio,512)
 				ENDIF ELSE BEGIN
 					nlabels = 0
@@ -751,7 +757,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       t_init = SYSTIME(/SECONDS)
       feedback_txt = 'Writing interim detection results.'
       EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
-			WINDOW,XSIZE=750*dataratio,YSIZE=750, $
+			IF ~KEYWORD_SET(NO_PLOT) THEN $
+        WINDOW,XSIZE=750*dataratio,YSIZE=750, $
         TITLE='EBDETECT: Continuity constraints'
 		ENDIF
     ; Define cube to be saved if not writing in place
@@ -765,7 +772,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 			mask = BYTARR(params.nx,params.ny)
 			FOR j=0,(*results[t]).ndetect-1 DO $
         mask[(*(*results[t]).structs[j]).pos] = 1B
-			IF (verbose GE 2) THEN BEGIN
+			IF ((verbose GE 2) AND ~KEYWORD_SET(NO_PLOT)) THEN BEGIN
 				TV,CONGRID(BYTSCL(LP_GET(sum_cube,t),/NAN),750*dataratio,750)
 				LOADCT,13,/SILENT
 				CONTOUR,CONGRID(mask,750*dataratio,750),COLOR=255, LEVELS = 1, /ISOTROPIC, $
@@ -932,10 +939,12 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     t_init = SYSTIME(/SECONDS)
     feedback_txt1 = 'Constructing final detection output.'
     EBDETECT_FEEDBACK, feedback_txt1+'..', /STATUS
-		WINDOW,XSIZE=750*dataratio,YSIZE=750, $
-      TITLE='EBDETECT: Lifetime constraints'
-		PLOT,INDGEN(params.nx),INDGEN(params.ny),POS=[0,0,1,1],XRANGE=[0,nx-1],$
-      YRANGE=[0,ny-1],/XS,/YS,/NODATA
+		IF ~KEYWORD_SET(NO_PLOT) THEN BEGIN
+      WINDOW,XSIZE=750*dataratio,YSIZE=750, $
+        TITLE='EBDETECT: Lifetime constraints'
+		  PLOT,INDGEN(params.nx),INDGEN(params.ny),POS=[0,0,1,1],XRANGE=[0,nx-1],$
+        YRANGE=[0,ny-1],/XS,/YS,/NODATA
+    ENDIF
 	ENDIF
   ; Create final selection of detections based on lifetime constraints
   detpass = 0L
@@ -1309,7 +1318,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   off = [-5,-20]  ; Offset for label overlays
   ; Create mask from final selection of detections
 	FOR t=0,params.nt-1 DO BEGIN													
-		IF (verbose GE 2) THEN BEGIN
+		IF ((verbose GE 2) AND ~KEYWORD_SET(NO_PLOT)) THEN BEGIN
 	    TV,CONGRID(BYTSCL(LP_GET(sum_cube,t),/NAN),750*dataratio,750)
 			LOADCT,13,/SILENT
 			CONTOUR,CONGRID(sel_detect_mask[*,*,t],750*dataratio,750),COLOR=255, $
@@ -1329,8 +1338,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 				ENDIF
 			ENDFOR
 			XYOUTS,10.,10.,'Selected detections at t='+STRTRIM(t,2),/DATA,COLOR=255,CHARSIZE=2
+		  IF (verbose EQ 2) THEN WAIT,0.5
 		ENDIF
-		IF (verbose EQ 2) THEN WAIT,0.5
 	ENDFOR
   IF (verbose GE 2) THEN BEGIN
     EBDETECT_FEEDBACK, feedback_txt1, /STATUS, /DONE, T_INIT=t_init
@@ -1382,7 +1391,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       STRTRIM(kernel_detect_counter,2)
 
   EBDETECT_FEEDBACK, /DONE, T_INIT=t_init_overall
-  WDELETE, 0
+  IF ((verbose GE 2) AND ~KEYWORD_SET(NO_PLOT)) THEN WDELETE, 0
 	IF (verbose EQ 3) THEN STOP
 
 END
