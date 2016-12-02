@@ -64,7 +64,7 @@ PRO EBDETECT_FEEDBACK, MessageString, DONE=done, STATUS=status, ERROR=error, $
   messagestring_final = called_by + type + messagestring
 
   IF KEYWORD_SET(DONE) THEN BEGIN
-    messagestring_final += 'Finished' 
+    messagestring_final += ' Finished' 
     IF (N_ELEMENTS(T_INIT) EQ 1) THEN $
       messagestring_final += ' in '+ STRTRIM(SYSTIME(/SECONDS)-t_init,2) + $
       ' sec' $
