@@ -24,8 +24,8 @@
 ;   VERBOSE     - Set verbosity level:
 ;                   0 = no feedback
 ;                   1 = initial parameters and progress timers
-;                   2 = as 1, plus interim status reports and detection
-;                       statistics
+;                   2 = as 1, plus interim status reports, feedback movies and
+;                       detection statistics
 ;                   3 = as 2, plus stopping in between major steps for debugging
 ;
 ; OUTPUTS:
@@ -41,8 +41,9 @@
 ;
 ; RESTRICTIONS:
 ;   Requires the following procedures and functions:
-;   Procedures: LP_HEADER, LP_WRITE, EBDETECT_MAKE_SUMCUBE, EBDETECT_TIMER
-;   Functions:  EBDETECT_INITIALIZE(), LP_GET()
+;   Procedures: LP_HEADER, LP_WRITE, EBDETECT_MAKE_SUMCUBE, EBDETECT_TIMER,
+;               EBDETECT_FEEDBACK
+;   Functions:  EBDETECT_INITIALIZE(), EBDETECT_ARRAY_COMPARE(), LP_GET()
 ;
 ; PROCEDURE:
 ;
@@ -72,7 +73,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   ; Get parameters and exit on error
   params = EBDETECT_INITIALIZE(ConfigFile, VERBOSE=(verbose GE 2))
   IF (params.exit_status EQ 0) THEN RETURN
-  
+
   ; Read in variables
   feedback_txt = 'processing variables and switches.'
   EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
@@ -90,8 +91,11 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     IF (params.sum_cube EQ 0) THEN BEGIN
       inputfile_exists = FILE_TEST(params.inputdir+params.inputfile)
       IF inputfile_exists THEN BEGIN
+        ; Get input file dimensions
       	LP_HEADER,params.inputdir+params.inputfile, NX=nx, NY=ny, NT=imnt 
-    	  nt = imnt/params.nlp
+    	  params.nt = imnt/params.nlp
+        params.nx = nx
+        params.ny = ny
       ENDIF ELSE BEGIN
         EBDETECT_FEEDBACK, /ERROR, /TERMINATE, $
           'No inputfile '+params.inputfile+' exists in directory '+$
@@ -121,9 +125,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     FILE_TEST(params.outputdir + params.detect_init_file)
   IF (params.comparison_mask NE '') THEN $
     comparison_mask_exists = FILE_TEST(params.inputdir + params.comparison_mask)
-  params.nx = nx
-  params.ny = ny
-  params.nt = nt
+
+  ; Read-in of detection thresholds/constraints
   ; Intensity thresholds and switches
   IF (N_ELEMENTS(params.sigma_constraint) GT 1) THEN $
     sigma_constraint = params.sigma_constraint[SORT(params.sigma_constraint)]
