@@ -118,7 +118,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   IF (params.lcsum_cube NE '') THEN $
     lcsum_cube_exists = FILE_TEST(params.inputdir + params.lcsum_cube)
 	IF (params.detect_init_file NE '') THEN detect_init_file_exists = $
-    FILE_TEST(params.inputdir + params.detect_init_file)
+    FILE_TEST(params.outputdir + params.detect_init_file)
   IF (params.comparison_mask NE '') THEN $
     comparison_mask_exists = FILE_TEST(params.inputdir + params.comparison_mask)
   params.nx = nx
@@ -152,14 +152,22 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
   IF (verbose EQ 3) THEN STOP
 
-;============================================================================== 
+;===============================================================================
+;======================== Create/set summed cube files =========================
+;===============================================================================
   ; Create summed wing cube if multiple sum_positions are given
+  IF (verbose GE 2) THEN BEGIN
+    feedback_txt = 'Creating/setting summed cube files.'
+    EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
+  ENDIF
 	IF ((wsum_cube_exists NE 1) AND (N_ELEMENTS(params.wsum_pos) GE 1)) THEN BEGIN
-    MESSAGE,'Status: creating summed wing cube...', /INFO
+    IF (verbose GE 2) THEN EBDETECT_FEEDBACK, /STATUS, $
+      '> Creating summed wing cube...'
     EBDETECT_MAKE_SUMCUBE, params.inputdir+params.inputfile, $
       params.wsum_pos, NLP=params.nlp, $
       OUTPUTFILENAME=params.outputdir+'wsum_'+FILE_BASENAME(params.inputfile), $
       WRITE_INPLACE=params.write_inplace, OUTDIR=params.outputdir
+    IF (verbose GE 2) THEN EBDETECT_FEEDBACK, /STATUS, /DONE
   ENDIF ELSE BEGIN
     IF KEYWORD_SET(params.sum_cube) THEN $
       sum_cube = params.inputdir+params.inputfile $
@@ -170,7 +178,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   ; Create summed "line-center" cube if multiple positions around line center
   ; are given
   IF ((lcsum_cube_exists NE 1) AND (N_ELEMENTS(params.lcsum_pos) GE 1)) THEN BEGIN
-    MESSAGE,'Status: creating summed line center cube...', /INFO
+    IF (verbose GE 2) THEN EBDETECT_FEEDBACK, /STATUS, $
+      '> Creating summed line center cube...'
     EBDETECT_MAKE_SUMCUBE, params.inputdir+params.inputfile, $
       params.lcsum_pos, NLP=params.nlp, $
       OUTPUTFILENAME=params.outputdir+'lcsum_'+FILE_BASENAME(params.inputfile), $
@@ -178,14 +187,22 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   ENDIF ELSE $
     lcsum_cube = params.inputdir+params.lcsum_cube
 
-	IF (verbose EQ 3) THEN STOP
+  IF (verbose GE 2) THEN BEGIN
+    EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
+  	IF (verbose EQ 3) THEN STOP
+  ENDIF
 
-;============================================================================== 
-
+;===============================================================================
+;======================== Determine average intensities ========================
+;===============================================================================
 ; Run first detection based on the intensity and size thresholds
 ; Supply SUM_CUBE with filename if not continuing from before
 ; Set keyword WRITE_FIRST_DETECT to write detections to file
 	IF (detect_init_file_exists NE 1) THEN BEGIN
+    IF (verbose GE 2) THEN BEGIN
+      feedback_txt = 'Determining average intensities.'
+      EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
+    ENDIF
     IF (params.running_mean EQ 1) THEN BEGIN
       IF (SIZE(params.running_mean,/TYPE) NE 7) THEN BEGIN
         running_mean_summed_cube = FLTARR(params.nt)
@@ -255,10 +272,9 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
         ENDELSE
       ENDIF ELSE $
         sel_summed_cube = summed_cube
-      IF ~KEYWORD_SET(FACTOR_SIGMA) THEN BEGIN
+      IF ~KEYWORD_SET(FACTOR_SIGMA) THEN $
         ; Determine the standard deviation in the cube
   		  sdev = STDDEV(DOUBLE(sel_summed_cube),/NAN) 
-      ENDIF
       ; Determine the average of the cube
   		mean_summed_cube = MEAN(sel_summed_cube, /DOUBLE,/NAN)             
     ENDELSE
@@ -267,8 +283,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     IF KEYWORD_SET(params.lc_constraint) THEN BEGIN
       lc_summed_cube = FLTARR(params.nx,params.ny,params.nt)
       IF lcsum_cube_exists THEN $
-        FOR t=0,params.nt-1 DO lc_summed_cube[0,0,t] = LP_GET(lc_sum_cube,t)
-      ENDIF ELSE BEGIN
+        FOR t=0,params.nt-1 DO lc_summed_cube[0,0,t] = LP_GET(lc_sum_cube,t) $
+      ELSE BEGIN
         FOR t=0,params.nt-1 DO $
           lc_summed_cube[0,0,t] = LP_GET(inputfile,t*nlp+params.lcsum_pos)
       ENDELSE
@@ -297,9 +313,11 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       sdev_lc_cube = STDDEV(sel_lc_summed_cube, /DOUBLE, /NAN)
       mean_lc_cube = MEAN(sel_lc_summed_cube, /DOUBLE, /NAN)
     ENDIF
+    IF (verbose GE 2) THEN $
+      EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
 
 ;===============================================================================
-;======================== Start intensity thresholding =========================
+;======================== Apply intensity thresholding =========================
 ;===============================================================================
     ; Define empty mask cube
 		mask_cube = BYTARR(params.nx,params.ny,params.nt)                     
@@ -308,7 +326,11 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 		pass = 0L
 		totnstructs = 0L
 		totnlabels = 0L
-		IF (verbose GE 2) THEN WINDOW, XSIZE=512*dataratio, YSIZE=512
+		IF (verbose GE 2) THEN BEGIN
+      feedback_txt = 'Applying intensity thresholding.'
+      EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
+      WINDOW, XSIZE=512*dataratio, YSIZE=512
+    ENDIF
 		t0 = SYSTIME(/SECONDS)
 		FOR t=0L,params.nt-1 DO BEGIN
 			mask = BYTARR(params.nx,params.ny)                           
@@ -417,10 +439,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 						  'Something is very wrong here... '+$
               STRTRIM(nstruct_pix,2)+' NE '+STRTRIM(nlabels_pix,2)
           ENDELSE
-					ENDELSE
-					IF (verbose GE 2) THEN BEGIN
+					IF (verbose GE 2) THEN $
             TVSCL,CONGRID(labels,512*dataratio,512)
-          ENDIF
 				ENDIF ELSE BEGIN
 					nlabels = 0
 					structs = 0
@@ -442,13 +462,15 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
         STRTRIM(nwheregt0,2)+'/'+STRTRIM(totalpixels,2)+$
         '. Detected structures: '+STRTRIM(nlabels,2)+'/'+STRTRIM(totnlabels,2)+'.'
 		ENDFOR
+    IF (verbose GE 2) THEN $
+      EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
    ; Write thresholding detections to file
 		IF KEYWORD_SET(params.write_detect_init) THEN BEGIN									
 			ndetections = totnlabels
 			outputfilename='ebdetect_stdev'+STRJOIN(STRTRIM(params.sigma_constraint,2),'-')+'_'+$
                       FILE_BASENAME(sum_cube)+'_detect_init.idlsave'
 			SAVE, results, ndetections, FILENAME=params.outputdir+outputfilename
-			PRINT,'Written: '+outputfilename
+			EBDETECT_FEEDBACK,'Written: '+params.outputdir+outputfilename, /STATUS
 		ENDIF
 	  IF (verbose EQ 3) THEN STOP
 	ENDIF
@@ -460,7 +482,15 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 ; Overlap filter: only propagate cases for which certain overlap criteria are obeyed
 ; All detections at t=0 are "true"
 ; If a first detection file is supplied, restore it now
-	IF detect_init_file_exists THEN RESTORE, params.detect_init_file							
+  IF (verbose GE 2) THEN BEGIN
+    feedback_txt = 'Applying overlap check.'
+    EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
+  ENDIF
+	IF detect_init_file_exists THEN BEGIN
+    RESTORE, params.outputdir+params.detect_init_file							
+    EBDETECT_FEEDBACK, '> Restored detections from file: '+$
+      params.outputdir+params.detect_init_file
+  ENDIF
 	pass = 0L
 ;	totpasses = 0L
 	tt = 0
@@ -562,16 +592,22 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 		ENDFOR
 	ENDFOR
 	last_detect_counter = detect_counter
-	IF (verbose EQ 3) THEN STOP
+  IF (verbose GE 2) THEN BEGIN
+    PRINT, ''
+    EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
+  	IF (verbose EQ 3) THEN STOP
+  ENDIF
 
 ;================================================================================
 ;=========================== Check for merging events ===========================
 ;================================================================================
 	IF KEYWORD_SET(params.merge_check) THEN BEGIN
     IF (verbose GE 1) THEN BEGIN
-      PRINT,''
-      IF (verbose GE 2) THEN $
-        EBDETECT_FEEDBACK, /STATUS, 'Performing merge check...'
+      IF (verbose GE 2) THEN BEGIN
+        feedback_txt = 'Performing merge check.'
+        EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
+      ENDIF ELSE $
+        PRINT,''
     ENDIF
 		pass = 0L
 		totpasses = 0L
@@ -671,8 +707,9 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 	ENDIF
 
   IF (verbose GE 2) THEN BEGIN
-      EBDETECT_FEEDBACK, /STATUS, $
-	      'Final number of single detections: '+STRTRIM(detect_counter,2)
+    EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
+    EBDETECT_FEEDBACK, /STATUS, $
+      'Final number of single detections: '+STRTRIM(detect_counter,2)
 	  IF (verbose EQ 3) THEN STOP
   ENDIF
 
@@ -682,13 +719,16 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 	IF ((verbose GE 2) OR KEYWORD_SET(params.write_detect_overlap)) THEN BEGIN
     ; Prep before looping over time
 		IF (verbose GE 2) THEN BEGIN
+      feedback_txt = 'Writing interim detection results.'
+      EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
 			WINDOW,XSIZE=750*dataratio,YSIZE=750
 		ENDIF
 		IF KEYWORD_SET(params.write_detect_overlap) THEN BEGIN
       IF ~KEYWORD_SET(params.write_inplae) THEN $
         overlap_mask_cube = BYTARR(params.nx,params.ny,params.nt)
-			outputfilename='./overlap_mask_stdev'+$
-        STRJOIN(STRTRIM(params.sigma_constraint,2),'-')+'_'+FILE_BASENAME()
+			outputfilename='overlap_mask_stdev'+$
+        STRJOIN(STRTRIM(params.sigma_constraint,2),'-')+'_'+$
+        FILE_BASENAME(params.inputfilename)
     ENDIF
     ; Loop over time and display results and/or write results to disk
 		FOR t=0,params.nt-1 DO BEGIN
@@ -715,24 +755,32 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 				WAIT,0.05
 			ENDIF
 			IF KEYWORD_SET(params.write_detect_overlap) THEN BEGIN
-        IF KEYWORD_SET(params.write_inplace) THEN BEGIN
-          LP_PUT, mask, params.outputdir+outputfilename, t, nt=params.nt, KEEP_OPEN=(t NE params.nt-1) 
-        ENDIF ELSE $
+        IF KEYWORD_SET(params.write_inplace) THEN $
+          LP_PUT, mask, params.outputdir+outputfilename, t, nt=params.nt, $
+            KEEP_OPEN=(t NE params.nt-1) $
+        ELSE $
           overlap_mask_cube[*,*,t] = mask
       ENDIF
 		ENDFOR
 		IF KEYWORD_SET(params.write_detect_overlap) THEN BEGIN
-      IF  ~KEYWORD_SET(params.write_inplace)) THEN $
+      IF  ~KEYWORD_SET(params.write_inplace) THEN $
   			LP_WRITE, overlap_mask_cube, params.outputdir+outputfilename
-      EBDETECT_FEEDBACK, /STATUS,'Written: '+outputfilename
+      EBDETECT_FEEDBACK, /STATUS,'Written: '+params.outputdir+outputfilename
 		ENDIF
 	ENDIF
-	IF (verbose EQ 3) THEN STOP
+  IF (verbose GE 2) THEN BEGIN
+    EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
+  	IF (verbose EQ 3) THEN STOP
+  ENDIF
 
 ;================================================================================
 ;============== Group detections and apply lifetime constraints =================
 ;================================================================================
 	; Group detections by label AKA determine lifetimes
+  IF (verbose GE 2) THEN BEGIN
+    feedback_txt = 'Grouping detections and applying lifetime constraints.'
+    EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
+  ENDIF
 	detections = PTRARR(detect_counter,/ALLOCATE_HEAP)
 	sel_detect_idx = -1
 	t0 = SYSTIME(/SECONDS)
@@ -818,6 +866,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 	ENDFOR
   IF (verbose GE 2) THEN BEGIN
     PRINT,''
+    EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
     EBDETECT_FEEDBACK, /STATUS, $
 	    'Final number of detections after lifetime constraint: '+$
       STRTRIM(N_ELEMENTS(sel_detect_idx),2)
@@ -839,6 +888,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 	sel_detections = PTRARR(nsel_detections,/ALLOCATE_HEAP)
 	sel_detect_mask = BYTARR(params.nx,params.ny,params.nt)
 	IF (verbose GE 2) THEN BEGIN
+    feedback_txt1 = 'Constructing final detection output.'
+    EBDETECT_FEEDBACK, feedback_txt1+'..', /STATUS
 		WINDOW,XSIZE=750*dataratio,YSIZE=750
 		PLOT,INDGEN(params.nx),INDGEN(params.ny),POS=[0,0,1,1],XRANGE=[0,nx-1],$
       YRANGE=[0,ny-1],/XS,/YS,/NODATA
@@ -851,6 +902,10 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     sel_kernel_mask = BYTARR(params.nx,params.ny,params.nt)
     last_kernel_detect_counter = 0L
     sum_kernel_detect_counter = 0L
+    IF (verbose GE 2) THEN BEGIN
+      feedback_txt2 = 'Getting high-intensity kernels.'
+      EBDETECT_FEEDBACK, feedback_txt2+'..', /STATUS
+    ENDIF
   ENDIF
 	FOR dd=0L,nsel_detections_orig-1 DO BEGIN											
     detlabel = (*detections[sel_detect_idx[dd]]).label
@@ -864,7 +919,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       ; If detection is not to be removed, continue selecting
   		*sel_detections[detpass] = *detections[sel_detect_idx[dd]]				
   		nt_loc = N_ELEMENTS((*sel_detections[detpass]).t)
-      IF KEYWORD_SET(GET_KERNELS) THEN kernelresults = PTRARR(nt_loc,/ALLOCATE_HEAP)
+      IF KEYWORD_SET(params.get_kernels) THEN kernelresults = PTRARR(nt_loc,/ALLOCATE_HEAP)
   		FOR tt=0,nt_loc-1 DO BEGIN 
         t_real = ((*sel_detections[detpass]).t)[tt]
 	  		mask = BYTARR(nx,ny)
@@ -1200,9 +1255,11 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     ENDIF
 	ENDFOR
 
-	IF ((verbose GE 2) AND KEYWORD_SET(params.get_kernels)) THEN $
+	IF ((verbose GE 2) AND KEYWORD_SET(params.get_kernels)) THEN BEGIN
+    EBDETECT_FEEDBACK, feedback_txt2, /STATUS, /DONE
     EBDETECT_FEEDBACK, /STATUS, $
       'Final number of single kernel detections: '+STRTRIM(kernel_detect_counter,2)
+  ENDIF
   replay = 0
   replay_point:
   off = [-5,-20]  ; Offset for label overlays
@@ -1231,11 +1288,14 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 		ENDIF
 		IF (verbose EQ 2) THEN WAIT,0.5
 	ENDFOR
-	IF (verbose EQ 3) THEN BEGIN
-    ans = ''
-    READ, ans, PROMPT='Do you wish to replay the movie? [Y/N]'
-    IF (STRUPCASE(ans) EQ 'Y') THEN GOTO,replay_point
-    STOP
+  IF (verbose GE 2) THEN BEGIN
+    EBDETECT_FEEDBACK, feedback_txt2, /STATUS, /DONE
+	  IF (verbose EQ 3) THEN BEGIN
+      ans = ''
+      READ, ans, PROMPT='Do you wish to replay the movie? [Y/N]'
+      IF (STRUPCASE(ans) EQ 'Y') THEN GOTO,replay_point
+      STOP
+    ENDIF
   ENDIF
 
 
