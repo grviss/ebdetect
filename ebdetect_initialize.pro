@@ -51,6 +51,7 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
     RETURN, -1
   ENDIF 
 
+  IF KEYWORD_SET(VERBOSE) THEN t_init = SYSTIME(/SECONDS)
   ; Create structure with default values
   result = { $
     ; File and directory names
@@ -139,7 +140,7 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
   ; Clean up and return
   FREE_LUN, lun
   IF KEYWORD_SET(VERBOSE) THEN $
-    EBDETECT_FEEDBACK, /DONE
+    EBDETECT_FEEDBACK, /DONE, T_INIT=t_init
 
   RETURN, result
                 
