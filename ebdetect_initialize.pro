@@ -71,6 +71,7 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
     write_mask:1B, write_inplace:1B, $
     exit_status:0B }
   dtypes = BYTARR(N_ELEMENTS(TAG_NAMES(result)))
+  result_orig = result
   FOR i=0,N_ELEMENTS(dtypes)-1 DO dtypes[i] = SIZE(result.(i), /TYPE)
  
   ; Checking existence of ConfigFile and if it does, process
@@ -97,8 +98,9 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
       IF (parsed_line.field NE '') THEN BEGIN
         IF KEYWORD_SET(VERBOSE) THEN EBDETECT_FEEDBACK, '   '+line
         ; Check which tag the current parsed_line.field corresponds to
-        wheretag = WHERE(STRLOWCASE(TAG_NAMES(result)) EQ $
+        wheretag = WHERE(STRLOWCASE(TAG_NAMES(result_orig)) EQ $
           STRLOWCASE(parsed_line.field), count)
+        IF (parsed_line.field EQ 'SIGMA_CONSTRAINT') THEN STOP
         IF (count EQ 1) THEN BEGIN
           CASE dtypes[wheretag] OF
             1:  value = BYTE(parsed_line.value)
