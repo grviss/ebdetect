@@ -68,6 +68,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     RETURN
   ENDIF
 
+  t_init_overall = SYSTIME(/SECONDS)
+  t_init = t_init_overall
   IF (N_ELEMENTS(VERBOSE) NE 1) THEN verbose = 0
  
   ; Get parameters and exit on error
@@ -177,7 +179,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   final_mask_filename = outfilename_base + '_final.maskcube'
   kernel_mask_filename = outfilename_base + '_final_kernels.maskcube'
 
-  EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
+  EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
   IF (verbose EQ 3) THEN STOP
 
 ;===============================================================================
@@ -185,6 +187,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 ;===============================================================================
   ; Create summed wing cube if multiple sum_positions are given
   IF (verbose GE 2) THEN BEGIN
+    t_init = SYSTIME(/SECONDS)
     feedback_txt = 'Creating/setting summed cube files.'
     EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
   ENDIF
@@ -209,11 +212,12 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       params.lcsum_pos, NLP=params.nlp, $
       OUTPUTFILENAME=params.outputdir+'lcsum_'+FILE_BASENAME(params.inputfile), $
       WRITE_INPLACE=params.write_inplace, OUTDIR=params.outputdir
+    IF (verbose GE 2) THEN EBDETECT_FEEDBACK, /STATUS, /DONE
   ENDIF ELSE $
     lcsum_cube = params.inputdir+params.lcsum_cube
 
   IF (verbose GE 2) THEN BEGIN
-    EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
+    EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
   	IF (verbose EQ 3) THEN STOP
   ENDIF
 
@@ -225,6 +229,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 ; Set keyword WRITE_FIRST_DETECT to write detections to file
 	IF (detect_init_file_exists NE 1) THEN BEGIN
     IF (verbose GE 2) THEN BEGIN
+      t_init = SYSTIME(/SECONDS)
       feedback_txt = 'Determining average intensities.'
       EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
     ENDIF
@@ -336,7 +341,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       mean_lc_cube = MEAN(sel_lc_summed_cube, /DOUBLE, /NAN)
     ENDIF
     IF (verbose GE 2) THEN $
-      EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
+      EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
 
 ;===============================================================================
 ;======================== Apply intensity thresholding =========================
@@ -349,6 +354,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 		totnstructs = 0L
 		totnlabels = 0L
 		IF (verbose GE 2) THEN BEGIN
+      t_init = SYSTIME(/SECONDS)
       feedback_txt = 'Applying intensity thresholding.'
       EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
       WINDOW, XSIZE=750*dataratio, YSIZE=750, $
@@ -486,7 +492,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
         '. Detected structures: '+STRTRIM(nlabels,2)+'/'+STRTRIM(totnlabels,2)+'.'
 		ENDFOR
     IF (verbose GE 2) THEN $
-      EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
+      EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
    ; Write thresholding detections to file
 		IF KEYWORD_SET(params.write_detect_init) THEN BEGIN									
 			ndetections = totnlabels
@@ -504,6 +510,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 ; All detections at t=0 are "true"
 ; If a first detection file is supplied, restore it now
   IF (verbose GE 2) THEN BEGIN
+    t_init = SYSTIME(/SECONDS)
     feedback_txt = 'Applying overlap check.'
     EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
   ENDIF
@@ -615,7 +622,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 	last_detect_counter = detect_counter
   IF (verbose GE 2) THEN BEGIN
     PRINT, ''
-    EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
+    EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
   	IF (verbose EQ 3) THEN STOP
   ENDIF
 
@@ -625,6 +632,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 	IF KEYWORD_SET(params.merge_check) THEN BEGIN
     IF (verbose GE 1) THEN BEGIN
       IF (verbose GE 2) THEN BEGIN
+        t_init = SYSTIME(/SECONDS)
         feedback_txt = 'Performing merge check.'
         EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
       ENDIF ELSE $
@@ -728,7 +736,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 	ENDIF
 
   IF (verbose GE 2) THEN BEGIN
-    EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
+    EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
     EBDETECT_FEEDBACK, /STATUS, $
       'Final number of single detections: '+STRTRIM(detect_counter,2)
 	  IF (verbose EQ 3) THEN STOP
@@ -740,6 +748,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 	IF ((verbose GE 2) OR KEYWORD_SET(params.write_detect_overlap)) THEN BEGIN
     ; Prep before looping over time
 		IF (verbose GE 2) THEN BEGIN
+      t_init = SYSTIME(/SECONDS)
       feedback_txt = 'Writing interim detection results.'
       EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
 			WINDOW,XSIZE=750*dataratio,YSIZE=750, $
@@ -800,7 +809,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 		ENDIF
 	ENDIF
   IF (verbose GE 2) THEN BEGIN
-    EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
+    EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
   	IF (verbose EQ 3) THEN STOP
   ENDIF
 
@@ -809,6 +818,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 ;================================================================================
 	; Group detections by label AKA determine lifetimes
   IF (verbose GE 2) THEN BEGIN
+    t_init = SYSTIME(/SECONDS)
     feedback_txt = 'Grouping detections and applying lifetime constraints.'
     EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
   ENDIF
@@ -897,7 +907,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 	ENDFOR
   IF (verbose GE 2) THEN BEGIN
     PRINT,''
-    EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
+    EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
     EBDETECT_FEEDBACK, /STATUS, $
 	    'Final number of detections after lifetime constraint: '+$
       STRTRIM(N_ELEMENTS(sel_detect_idx),2)
@@ -919,6 +929,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 	sel_detections = PTRARR(nsel_detections,/ALLOCATE_HEAP)
 	sel_detect_mask = BYTARR(params.nx,params.ny,params.nt)
 	IF (verbose GE 2) THEN BEGIN
+    t_init = SYSTIME(/SECONDS)
     feedback_txt1 = 'Constructing final detection output.'
     EBDETECT_FEEDBACK, feedback_txt1+'..', /STATUS
 		WINDOW,XSIZE=750*dataratio,YSIZE=750, $
@@ -935,6 +946,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     last_kernel_detect_counter = 0L
     sum_kernel_detect_counter = 0L
     IF (verbose GE 2) THEN BEGIN
+      t_init2 = SYSTIME(/SECONDS)
       feedback_txt2 = 'Getting high-intensity kernels.'
       EBDETECT_FEEDBACK, feedback_txt2+'..', /STATUS
     ENDIF
@@ -1288,7 +1300,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 	ENDFOR
 
 	IF ((verbose GE 2) AND KEYWORD_SET(params.get_kernels)) THEN BEGIN
-    EBDETECT_FEEDBACK, feedback_txt2, /STATUS, /DONE
+    EBDETECT_FEEDBACK, feedback_txt2, /STATUS, /DONE, T_INIT=t_init2
     EBDETECT_FEEDBACK, /STATUS, $
       'Final number of single kernel detections: '+STRTRIM(kernel_detect_counter,2)
   ENDIF
@@ -1321,7 +1333,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 		IF (verbose EQ 2) THEN WAIT,0.5
 	ENDFOR
   IF (verbose GE 2) THEN BEGIN
-    EBDETECT_FEEDBACK, feedback_txt2, /STATUS, /DONE
+    EBDETECT_FEEDBACK, feedback_txt1, /STATUS, /DONE, T_INIT=t_init
 	  IF (verbose EQ 3) THEN BEGIN
       ans = ''
       READ, ans, PROMPT='Do you wish to replay the movie? [Y/N]'
@@ -1336,6 +1348,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 ;================================================================================
 	IF KEYWORD_SET(params.write_detect_final) THEN BEGIN
     IF (verbose GE 2) THEN BEGIN
+      t_init = SYSTIME(/SECONDS)
       feedback_txt = 'Writing final results.'
       EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
     ENDIF
@@ -1351,7 +1364,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       ENDIF
     ENDIF
     IF (verbose GE 2) THEN $
-      EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
+      EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
 	ENDIF
 
 ;================================================================================
@@ -1368,7 +1381,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     EBDETECT_FEEDBACK, '# of kernels:                        '+$
       STRTRIM(kernel_detect_counter,2)
 
-  EBDETECT_FEEDBACK, /DONE
+  EBDETECT_FEEDBACK, /DONE, T_INIT=t_init_overall
+  WDELETE, 0
 	IF (verbose EQ 3) THEN STOP
 
 END
