@@ -149,6 +149,18 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   ELSE $
     max_lifetime = params.nt
 
+  ; Set output filenames
+  suffix = '.'+(STRSPLIT(FILE_BASENAME(params.inputfile), '.', /EXTRACT))[-1] 
+  outfilename_base = 'ebdetect_stdev'+STRJOIN(STRTRIM($
+    params.sigma_constraint,2),'-')+'_'+$
+    FILE_BASENAME(params.inputfilename, suffix)
+  running_mean_idlsave = outfilename_base + '_running_mean_sdev.idlsave'
+  detect_init_idlsave = outfilename_base + '_detect_init.idlsave'
+  detect_final_idlsave = outfilename_base +'_final.idlsave'
+  overlap_mask_filename = outfilename_base + '_overlap_mask.bcube'
+  final_mask_filename = outfilename_base + '_final_mask.bcube'
+  kernel_mask_filename = outfilename_base + '_final_kernelmask.bcube'
+
   EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
   IF (verbose EQ 3) THEN STOP
 
@@ -231,11 +243,10 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
             EBDETECT_TIMER,t+1,params.nt,t0, /DONE, TOTAL_TIME=(verbose GE 2), $
               EXTRA_OUTPUT='Determining running mean...'
         ENDFOR
-  			outputfilename='ebdetect_stdev'+STRJOIN(STRTRIM(params.sigma_constraint,2),'-')+'_'+$
-                        FILE_BASENAME(sum_cube)+'_running_mean_sdev.idlsave'
   			SAVE, running_mean_summed_cube, running_sdev, $
-          FILENAME=params.outputdir+outputfilename
-        EBDETECT_FEEDBACK, /SATUS, 'Written: '+params.outputdir+outputfilename
+          FILENAME=params.outputdir+running_mean_idlsave
+        EBDETECT_FEEDBACK, /SATUS, 'Written: '+$
+          params.outputdir+running_mean_idlsave
       ENDIF ELSE RESTORE, params.running_mean, VERBOSE=(verbose GT 1)
     ENDIF ELSE BEGIN
       ; Read in summed wing cube
@@ -385,7 +396,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 					IF (TOTAL(discard_pix EQ wheregt1[i]) LE 0) THEN BEGIN					
             IF (nwheregt1 GT 1) THEN BEGIN
             ; Grow the region of selected pixels touching the selected pixel
-              IF KEYWORD_SET(LOOSE_HYSTERESIS) THEN $
+              IF KEYWORD_SET(params.loose_hysteresis) THEN $
     						structpix = REGION_GROW(pad_mask,wheregt1[i],/ALL)	$
               ELSE BEGIN
   						  structpix = REGION_GROW(pad_mask,wheregt1[i],/ALL, THRESH=[1,2])
@@ -467,10 +478,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
    ; Write thresholding detections to file
 		IF KEYWORD_SET(params.write_detect_init) THEN BEGIN									
 			ndetections = totnlabels
-			outputfilename='ebdetect_stdev'+STRJOIN(STRTRIM(params.sigma_constraint,2),'-')+'_'+$
-                      FILE_BASENAME(sum_cube)+'_detect_init.idlsave'
-			SAVE, results, ndetections, FILENAME=params.outputdir+outputfilename
-			EBDETECT_FEEDBACK,'Written: '+params.outputdir+outputfilename, /STATUS
+			SAVE, results, ndetections, FILENAME=params.outputdir+detect_init_idlsave
+			EBDETECT_FEEDBACK,'Written: '+params.outputdir+detect_init_idlsave, /STATUS
 		ENDIF
 	  IF (verbose EQ 3) THEN STOP
 	ENDIF
@@ -727,9 +736,6 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
         KEYWORD_SET(params.write_mask)) THEN BEGIN
       IF ~KEYWORD_SET(params.write_inplae) THEN $
         overlap_mask_cube = BYTARR(params.nx,params.ny,params.nt)
-			outputfilename='overlap_mask_stdev'+$
-        STRJOIN(STRTRIM(params.sigma_constraint,2),'-')+'_'+$
-        FILE_BASENAME(params.inputfilename)
     ENDIF
     ; Loop over time and display results and/or write results to disk
 		FOR t=0,params.nt-1 DO BEGIN
@@ -758,7 +764,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 			IF (KEYWORD_SET(params.write_detect_overlap) AND $
           KEYWORD_SET(params.write_mask)) THEN BEGIN
         IF KEYWORD_SET(params.write_inplace) THEN $
-          LP_PUT, mask, params.outputdir+outputfilename, t, nt=params.nt, $
+          LP_PUT, mask, params.outputdir+overlap_mask_filename, t, nt=params.nt, $
             KEEP_OPEN=(t NE params.nt-1) $
         ELSE $
           overlap_mask_cube[*,*,t] = mask
@@ -767,8 +773,9 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 		IF (KEYWORD_SET(params.write_detect_overlap) AND $
         KEYWORD_SET(params.write_mask)) THEN BEGIN
       IF  ~KEYWORD_SET(params.write_inplace) THEN $
-  			LP_WRITE, overlap_mask_cube, params.outputdir+outputfilename
-      EBDETECT_FEEDBACK, /STATUS,'Written: '+params.outputdir+outputfilename
+  			LP_WRITE, overlap_mask_cube, params.outputdir+overlap_mask_filename
+      EBDETECT_FEEDBACK, /STATUS, $
+        'Written: '+params.outputdir+overlap_mask_filename
 		ENDIF
 	ENDIF
   IF (verbose GE 2) THEN BEGIN
@@ -1311,21 +1318,14 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
     ENDIF
     ; Write IDL save file
-		outputfilename='detect_eb_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
-                      FILE_BASENAME(sum_cube)+'_final.idlsave'
-		SAVE,sel_detections,nsel_detections,filename=params.outputdir+outputfilename
-		EBDETECT_FEEDBACK, '> Written: '+params.outputdir+outputfilename
+		SAVE,sel_detections,nsel_detections,filename=params.outputdir+detect_final_idlsave
+		EBDETECT_FEEDBACK, '> Written: '+params.outputdir+detect_final_idlsave
     IF KEYWORD_SET(params.write_mask) THEN BEGIN
-  		outputfilename='final_mask_stdev'+STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
-                        FILE_BASENAME(sum_cube)
-  		LP_WRITE,sel_detect_mask, params.outputdir+outputfilename
-  		EBDETECT_FEEDBACK,'> Written: '+params.outputdir+outputfilename
+  		LP_WRITE,sel_detect_mask, params.outputdir+final_mask_filename
+  		EBDETECT_FEEDBACK,'> Written: '+params.outputdir+final_mask_filename
       IF KEYWORD_SET(params.get_kernels) THEN BEGIN
-  	  	outputfilename='final_kernelmask_stdev'+$
-          STRJOIN(STRTRIM(sigma_constraint,2),'-')+'_'+$
-          FILE_BASENAME(sum_cube)
-  	  	LP_WRITE,sel_kernel_mask, params.outputdir+outputfilename
-  	  	EBDETECT_FEEDBACK, '> Written: '+params.outputdir+outputfilename
+  	  	LP_WRITE,sel_kernel_mask, params.outputdir+kernel_mask_filename
+  	  	EBDETECT_FEEDBACK, '> Written: '+params.outputdir+kernel_mask_filename
       ENDIF
     ENDIF
     IF (verbose GE 2) THEN $
