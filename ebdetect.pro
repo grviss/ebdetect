@@ -156,7 +156,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
   suffix = '.'+(STRSPLIT(FILE_BASENAME(params.inputfile), '.', /EXTRACT))[-1] 
   outfilename_base = 'ebdetect_stdev'+STRJOIN(STRTRIM($
     params.sigma_constraint,2),'-')+'_'+$
-    FILE_BASENAME(params.inputfilename, suffix)
+    FILE_BASENAME(params.inputfile, suffix)
   running_mean_idlsave = outfilename_base + '_running_mean_sdev.idlsave'
   detect_init_idlsave = outfilename_base + '_init.idlsave'
   detect_overlap_idlsave = outfilename_base + '_overlap.idlsave'
