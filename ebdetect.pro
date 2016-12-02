@@ -155,11 +155,12 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
     params.sigma_constraint,2),'-')+'_'+$
     FILE_BASENAME(params.inputfilename, suffix)
   running_mean_idlsave = outfilename_base + '_running_mean_sdev.idlsave'
-  detect_init_idlsave = outfilename_base + '_detect_init.idlsave'
+  detect_init_idlsave = outfilename_base + '_init.idlsave'
+  detect_overlap_idlsave = outfilename_base + '_overlap.idlsave'
   detect_final_idlsave = outfilename_base +'_final.idlsave'
-  overlap_mask_filename = outfilename_base + '_overlap_mask.bcube'
-  final_mask_filename = outfilename_base + '_final_mask.bcube'
-  kernel_mask_filename = outfilename_base + '_final_kernelmask.bcube'
+  overlap_mask_filename = outfilename_base + '_overlap.maskcube'
+  final_mask_filename = outfilename_base + '_final.maskcube'
+  kernel_mask_filename = outfilename_base + '_final_kernels.maskcube'
 
   EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE
   IF (verbose EQ 3) THEN STOP
@@ -732,6 +733,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
       EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
 			WINDOW,XSIZE=750*dataratio,YSIZE=750
 		ENDIF
+    ; Define cube to be saved if not writing in place
 		IF (KEYWORD_SET(params.write_detect_overlap) AND $
         KEYWORD_SET(params.write_mask)) THEN BEGIN
       IF ~KEYWORD_SET(params.write_inplae) THEN $
@@ -770,12 +772,19 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
           overlap_mask_cube[*,*,t] = mask
       ENDIF
 		ENDFOR
-		IF (KEYWORD_SET(params.write_detect_overlap) AND $
-        KEYWORD_SET(params.write_mask)) THEN BEGIN
-      IF  ~KEYWORD_SET(params.write_inplace) THEN $
+    ; Save results
+		IF KEYWORD_SET(params.write_detect_overlap) THEN BEGIN
+      ; Write detection save file
+			ndetections = detect_counter
+			SAVE, results, ndetections, FILENAME=params.outputdir+detect_overlap_idlsave
+			EBDETECT_FEEDBACK,'> Written: '+params.outputdir+detect_overlap_idlsave, /STATUS
+      ; Write cube if needed
+      IF (KEYWORD_SET(params.write_mask) AND $
+          ~KEYWORD_SET(params.write_inplace)) THEN BEGIN
   			LP_WRITE, overlap_mask_cube, params.outputdir+overlap_mask_filename
-      EBDETECT_FEEDBACK, /STATUS, $
-        'Written: '+params.outputdir+overlap_mask_filename
+        EBDETECT_FEEDBACK, /STATUS, $
+          '> Written: '+params.outputdir+overlap_mask_filename
+      ENDIF
 		ENDIF
 	ENDIF
   IF (verbose GE 2) THEN BEGIN
@@ -1336,11 +1345,15 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose
 ;=========================== Output final statistics ============================
 ;================================================================================
   EBDETECT_FEEDBACK, 'Detection statistics:'
-  EBDETECT_FEEDBACK, '# after intensity & size thresholds: '+STRTRIM(totnlabels,2)
-	EBDETECT_FEEDBACK, '# after continuity constraints:      '+STRTRIM(detect_counter,2)
-	EBDETECT_FEEDBACK, '# after lifetime constraint:         '+STRTRIM(N_ELEMENTS(sel_detect_idx),2)
+  EBDETECT_FEEDBACK, '# after intensity & size thresholds: '+$
+    STRTRIM(totnlabels,2)
+	EBDETECT_FEEDBACK, '# after continuity constraints:      '+$
+    STRTRIM(detect_counter,2)
+	EBDETECT_FEEDBACK, '# after lifetime constraint:         '+$
+    STRTRIM(N_ELEMENTS(sel_detect_idx),2)
 	IF KEYWORD_SET(GET_KERNELS) THEN $
-    EBDETECT_FEEDBACK, '# of kernels:                        '+STRTRIM(kernel_detect_counter,2)
+    EBDETECT_FEEDBACK, '# of kernels:                        '+$
+      STRTRIM(kernel_detect_counter,2)
 
   EBDETECT_FEEDBACK, /DONE
 	IF (verbose EQ 3) THEN STOP
