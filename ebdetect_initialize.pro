@@ -73,7 +73,6 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
   dtypes = BYTARR(N_ELEMENTS(TAG_NAMES(result)))
   result_orig = result
   FOR i=0,N_ELEMENTS(dtypes)-1 DO dtypes[i] = SIZE(result.(i), /TYPE)
-  print,result.remove_detections
  
   ; Checking existence of ConfigFile and if it does, process
   IF (N_ELEMENTS(ConfigFile) NE 1) THEN BEGIN
@@ -103,7 +102,7 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
           STRLOWCASE(parsed_line.field), count)
         IF (count EQ 1) THEN BEGIN
           CASE dtypes[wheretag] OF
-            1:  value = BYTE(parsed_line.value)
+            1:  value = BYTE(FIX(parsed_line.value))
             2:  value = FIX(parsed_line.value)
             3:  value = LONG(parsed_line.value)
             4:  value = FLOAT(parsed_line.value)
@@ -127,8 +126,11 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
               N_ELEMENTS(result_orig.(wheretag))) THEN BEGIN
             result = EBDETECT_TAG_DELETE(result, parsed_line.field)
             result = CREATE_STRUCT(result, parsed_line.field, value)
-          ENDIF ELSE $
-            result.(wheretag) = value
+          ENDIF ELSE BEGIN
+            wheretag_new = WHERE(STRLOWCASE(TAG_NAMES(result)) EQ $
+              STRLOWCASE(parsed_line.field))
+            result.(wheretag_new) = value
+          ENDELSE
         ENDIF
       ENDIF
     ENDWHILE
