@@ -73,6 +73,7 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
   dtypes = BYTARR(N_ELEMENTS(TAG_NAMES(result)))
   result_orig = result
   FOR i=0,N_ELEMENTS(dtypes)-1 DO dtypes[i] = SIZE(result.(i), /TYPE)
+  print,result.remove_detections
  
   ; Checking existence of ConfigFile and if it does, process
   IF (N_ELEMENTS(ConfigFile) NE 1) THEN BEGIN
@@ -123,7 +124,7 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
           ; correspond with the default, delete the tag and reconstruct the
           ; result array with the read-in value
           IF (N_ELEMENTS(parsed_line.value) NE $
-              N_ELEMENTS(result.(wheretag))) THEN BEGIN
+              N_ELEMENTS(result_orig.(wheretag))) THEN BEGIN
             result = EBDETECT_TAG_DELETE(result, parsed_line.field)
             result = CREATE_STRUCT(result, parsed_line.field, value)
           ENDIF ELSE $
