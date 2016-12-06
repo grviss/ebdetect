@@ -71,8 +71,11 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
     write_detect_init:1B, write_detect_overlap:1B, write_detect_final:1B, $
     write_mask:1B, write_inplace:1B, $
     exit_status:0B }
-  dtypes = BYTARR(N_ELEMENTS(TAG_NAMES(result)))
+  tag_names_orig = TAG_NAMES(result)
+  ntag_names_orig = N_ELEMENTS(tag_names_orig)
+  dtypes = BYTARR(ntag_names_orig)
   result_orig = result
+  read_from_file = BYTARR(ntag_names_orig)
   FOR i=0,N_ELEMENTS(dtypes)-1 DO dtypes[i] = SIZE(result.(i), /TYPE)
  
   ; Checking existence of ConfigFile and if it does, process
@@ -99,9 +102,10 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
       IF (parsed_line.field NE '') THEN BEGIN
         IF KEYWORD_SET(VERBOSE) THEN EBDETECT_FEEDBACK, '   '+line
         ; Check which tag the current parsed_line.field corresponds to
-        wheretag = WHERE(STRLOWCASE(TAG_NAMES(result_orig)) EQ $
+        wheretag = WHERE(STRLOWCASE(tag_names_orig) EQ $
           STRLOWCASE(parsed_line.field), count)
         IF (count EQ 1) THEN BEGIN
+          read_from_file[wheretag] = 1
           CASE dtypes[wheretag] OF
             1:  value = BYTE(FIX(parsed_line.value))
             2:  value = FIX(parsed_line.value)
@@ -135,6 +139,29 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
         ENDIF
       ENDIF
     ENDWHILE
+    
+    ; Output default settings for variables not read from file
+    IF KEYWORD_SET(VERBOSE) THEN BEGIN
+      wherezero = WHERE(read_from_file EQ 0, count)
+      IF (count GE 1) THEN BEGIN
+        EBDETECT_FEEDBACK, ' '
+        msg1 = '   The following keywords and settings were not found in '
+        msg2 = '   the configuration file and were set to their defaults:'
+        EBDETECT_FEEDBACK, STRJOIN(REPLICATE('=', STRLEN(msg1)))
+        EBDETECT_FEEDBACK, msg1
+        EBDETECT_FEEDBACK, msg2
+        EBDETECT_FEEDBACK, STRJOIN(REPLICATE('=', STRLEN(msg1)))
+        ; Skip over last item (as that is exit_status)
+        FOR i=0,count-2 DO BEGIN
+          value = result_orig.(wherezero[i])
+          IF (SIZE(value, /TYPE) EQ 1) THEN value = FIX(value)
+          IF (N_ELEMENTS(value) GT 1) THEN $
+            value = '['+STRJOIN(STRTRIM(value,2),',')+']'
+          EBDETECT_FEEDBACK, '   '+tag_names_orig[wherezero[i]]+$
+            ' = '+STRTRIM(value,2)
+        ENDFOR
+      ENDIF
+    ENDIF
   ENDELSE
 
   ; Clean up and return
