@@ -59,6 +59,7 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
     detect_init_file:'', inputdir:'./', outputdir:'./', $
     ; Detection parameters
     nlp:1L, nx:1L, ny:1L, nt:1L, wsum_pos:0L, lcsum_pos:0L, $
+    intensity_constraint:!VALUES.F_NAN, $
     sigma_constraint:0., lc_sigma:0., lifetime_constraint:[0L,1L], $
     size_constraint:[1L,1L], overlap_constraint:1L, t_skip_constraint:0L, $
     limit_group_search:0L, $
@@ -70,12 +71,12 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
     lc_constraint:0B, merge_check:1B, split_check:1B, $
     write_detect_init:1B, write_detect_overlap:1B, write_detect_final:1B, $
     write_mask:1B, write_inplace:1B, $
-    exit_status:0B }
+    read_from_file:0B, exit_status:0B }
   tag_names_orig = TAG_NAMES(result)
   ntag_names_orig = N_ELEMENTS(tag_names_orig)
   dtypes = BYTARR(ntag_names_orig)
   result_orig = result
-  read_from_file = BYTARR(ntag_names_orig)
+  result.read_from_file = BYTARR(ntag_names_orig)
   FOR i=0,N_ELEMENTS(dtypes)-1 DO dtypes[i] = SIZE(result.(i), /TYPE)
  
   ; Checking existence of ConfigFile and if it does, process
@@ -105,7 +106,7 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
         wheretag = WHERE(STRLOWCASE(tag_names_orig) EQ $
           STRLOWCASE(parsed_line.field), count)
         IF (count EQ 1) THEN BEGIN
-          read_from_file[wheretag] = 1
+          result.read_from_file[wheretag] = 1
           CASE dtypes[wheretag] OF
             1:  value = BYTE(FIX(parsed_line.value))
             2:  value = FIX(parsed_line.value)
@@ -142,7 +143,7 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
     
     ; Output default settings for variables not read from file
     IF KEYWORD_SET(VERBOSE) THEN BEGIN
-      wherezero = WHERE(read_from_file EQ 0, count)
+      wherezero = WHERE(result.read_from_file EQ 0, count)
       IF (count GE 1) THEN BEGIN
         EBDETECT_FEEDBACK, ' '
         msg1 = '   The following keywords and settings were not found in '

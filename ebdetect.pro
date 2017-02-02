@@ -147,9 +147,17 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose, NO_PLOT=no_plot
 
   ; Read-in of detection thresholds/constraints
   ; Intensity thresholds and switches
+  intensity_constraint_set = 0
+  intensity_constraint_idx = WHERE(STRLOWCASE(TAG_NAMES(params)) EQ $
+    'intensity_constraint', count)
+  IF (count NE 0) THEN $
+    intensity_constraint_set = FINITE(params.intensity_constraint)
   IF (N_ELEMENTS(params.sigma_constraint) GT 1) THEN $
     sigma_constraint = params.sigma_constraint[SORT(params.sigma_constraint)]
-  nlevels = N_ELEMENTS(sigma_constraint)
+  IF intensity_constraint_set THEN $
+    nlevels = N_ELEMENTS(params.intensity_constraint) $
+  ELSE $
+    nlevels = N_ELEMENTS(sigma_constraint)
   IF (N_ELEMENTS(params.lc_sigma) GT 1) THEN $
     lc_sigma = params.lc_sigma[SORT(params.lc_sigma)]
   IF (N_ELEMENTS(params.region_threshold) EQ 4) THEN $
@@ -377,10 +385,14 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose, NO_PLOT=no_plot
       ENDIF
       FOR s=0,nlevels-1 DO BEGIN                      
         ; Allow for hysteresis constraints
-        IF KEYWORD_SET(params.factor_sigma) THEN  $
-          threshold = mean_summed_cube*params.sigma_constraint[s] $
-        ELSE $
-          threshold = mean_summed_cube+params.sigma_constraint[s]*sdev
+        IF intensity_constraint_set THEN $
+          threshold = params.intensity_constraint[s] $
+        ELSE BEGIN
+          IF KEYWORD_SET(params.factor_sigma) THEN  $
+            threshold = mean_summed_cube*params.sigma_constraint[s] $
+          ELSE $
+            threshold = mean_summed_cube+params.sigma_constraint[s]*sdev
+        ENDELSE
   			wheregt = WHERE(select_summed_cube GT threshold, count)			
         ; Increase mask pixels gt constraint with 1
         IF (count NE 0) THEN $
