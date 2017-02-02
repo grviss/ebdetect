@@ -71,12 +71,12 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
     lc_constraint:0B, merge_check:1B, split_check:1B, $
     write_detect_init:1B, write_detect_overlap:1B, write_detect_final:1B, $
     write_mask:1B, write_inplace:1B, $
-    read_from_file:0B, exit_status:0B }
+    exit_status:0B }
   tag_names_orig = TAG_NAMES(result)
   ntag_names_orig = N_ELEMENTS(tag_names_orig)
   dtypes = BYTARR(ntag_names_orig)
   result_orig = result
-  result.read_from_file = BYTARR(ntag_names_orig)
+  result = CREATE_STRUCT(result, 'read_from_file', BYTARR(ntag_names_orig))
   FOR i=0,N_ELEMENTS(dtypes)-1 DO dtypes[i] = SIZE(result.(i), /TYPE)
  
   ; Checking existence of ConfigFile and if it does, process
