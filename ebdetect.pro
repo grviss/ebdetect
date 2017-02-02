@@ -218,7 +218,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose, NO_PLOT=no_plot
      
   ; Create summed "line-center" cube if multiple positions around line center
   ; are given
-  IF ((lcsum_cube_exists NE 1) AND (N_ELEMENTS(params.lcsum_pos) GE 1)) THEN BEGIN
+  IF (params.lc_constraint AND (lcsum_cube_exists NE 1) AND $
+    (N_ELEMENTS(params.lcsum_pos) GE 1)) THEN BEGIN
     IF (verbose GE 2) THEN EBDETECT_FEEDBACK, /STATUS, $
       '> Creating summed line center cube...'
     EBDETECT_MAKE_SUMCUBE, params.inputdir+params.inputfile, $
