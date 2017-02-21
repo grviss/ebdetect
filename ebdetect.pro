@@ -88,6 +88,9 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose, NO_PLOT=no_plot
     params.inputdir += PATH_SEP()
   IF (STRMID(params.outputdir,0,1,/REVERSE) NE PATH_SEP()) THEN $
     params.outputdir += PATH_SEP()
+  ; Check that directory exists, and if not create it
+  IF (FILE_TEST(params.outputdir) EQ 0) THEN $
+    FILE_MKDIR(params.outputdir)
   ; Set summed cube file names
   IF KEYWORD_SET(params.sum_cube) THEN BEGIN
     wsum_cube_filename = params.inputfile 
