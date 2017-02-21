@@ -291,7 +291,7 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose, NO_PLOT=no_plot
           TOTAL_TIME=(verbose GE 2)
       ENDFOR
       ; Select only pixels as defined by REGION_THRESHOLD
-      IF (N_ELEMENTS(params.region_threshold) GE 1) THEN BEGIN
+      IF KEYWORD_SET(region_threshold_set) THEN BEGIN
         IF (N_ELEMENTS(params.region_threshold) EQ 4) THEN $
           sel_summed_cube = $
             summed_cube[params.region_threshold[0]:params.region_threshold[2],$
