@@ -152,8 +152,8 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose, NO_PLOT=no_plot
     'intensity_constraint', count)
   IF (count NE 0) THEN $
     intensity_constraint_set = FINITE(params.intensity_constraint)
-  IF (N_ELEMENTS(params.sigma_constraint) GT 1) THEN $
-    sigma_constraint = params.sigma_constraint[SORT(params.sigma_constraint)]
+  IF (N_ELEMENTS(params.sigma_constraint) GE 1) THEN $
+    sigma_constraint = params.sigma_constraint[SORT(params.sigma_constraint)] 
   IF intensity_constraint_set THEN $
     nlevels = N_ELEMENTS(params.intensity_constraint) $
   ELSE $
