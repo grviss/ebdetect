@@ -22,15 +22,20 @@
 ;                 directory 
 ;
 ; KEYWORD PARAMETERS:
-;   VERBOSE     - Set verbosity level:
-;                   0 = no feedback
-;                   1 = initial parameters and progress timers
-;                   2 = as 1, plus interim status reports, feedback movies and
-;                       detection statistics
-;                   3 = as 2, plus stopping in between major steps for debugging
-;                   Defaults to 0.
-;   NO_PLOT     - Set if plots should be suppressed. Has no effect unless
-;                 VERBOSE is set to 2 or higher. Defaults to 0.
+;   OVERRIDE_PARAMS - Structure with tag names as defined in ConfigFile that
+;                     should be overridden by other values. Should only be used
+;                     when running a detection grid where up to a handful of
+;                     parameters change for each run while the majority remains
+;                     the same. 
+;   VERBOSE         - Set verbosity level:
+;                       0 = no feedback
+;                       1 = initial parameters and progress timers
+;                       2 = as 1, plus interim status reports, feedback movies
+;                           and detection statistics
+;                       3 = as 2, plus stopping in between major steps for
+;                           debugging. Defaults to 0.
+;   NO_PLOT         - Set if plots should be suppressed. Has no effect unless 
+;                     VERBOSE is set to 2 or higher. Defaults to 0.
 ;
 ; OUTPUTS:
 ;   Depending on the switches set in the configuration file, the code will
@@ -60,9 +65,11 @@
 ;   2016 Nov 30 GV: Cleaned away all input keywords that are now populated from
 ;                   the configuration file and updated handling of input keywords
 ;   2016 Dec 02 GV: Version 1.0 
+;   2017 Feb 21 GV: Added OVERRIDE_PARAMS keyword
 ;-
 ;
-PRO EBDETECT, ConfigFile, VERBOSE=verbose, NO_PLOT=no_plot
+PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
+  NO_PLOT=no_plot
 
 ;============================================================================== 
 
@@ -80,6 +87,43 @@ PRO EBDETECT, ConfigFile, VERBOSE=verbose, NO_PLOT=no_plot
   ; Get parameters and exit on error
   params = EBDETECT_INITIALIZE(ConfigFile, VERBOSE=(verbose GE 2))
   IF (params.exit_status EQ 0) THEN RETURN
+
+  ; Check for overriding parameters from configuration file
+  ; Can be useful when running grids of detections
+  IF (N_ELEMENTS(OVERRIDE_PARAMS) GE 1) THEN BEGIN
+    IF (SIZE(OVERRIDE_PARAMS, /TYPE) EQ 8) THEN BEGIN
+      override_tags = TAG_NAMES(override_params)
+      init_tags = TAG_NAMES(params)
+      pass = 0
+      FOR i=0,N_ELEMENTS(override_tags)-1 DO BEGIN
+        wheretag = WHERE(STRLOWCASE(init_tags) EQ $
+          STRLOWCASE(override_tags[i]), count)
+        IF (count EQ 1) THEN BEGIN
+          IF (pass EQ 0) THEN $
+            EBDETECT_FEEDBACK, 'Overriding results from EBDETECT_INITIALIZE'
+          IF (N_ELEMENTS(params.(wheretag)) EQ 1) THEN $
+            oldvalue = STRTRIM(params.(wheretag),2) $
+          ELSE $
+            oldvalue = '['+STRCOMPRESS(STRJOIN(params.(wheretag),','),/REMOVE_ALL)+']'
+          IF (N_ELEMENTS(override_params.(i)) EQ 1) THEN $
+            newvalue = STRTRIM(override_params.(i),2) $
+          ELSE $
+            newvalue = '['+STRCOMPRESS(STRJOIN(override_params.(i),','),/REMOVE_ALL)+']'
+          EBDETECT_FEEDBACK, STRJOIN(REPLICATE(' ',14))+$
+            STRUPCASE(override_tags[i])+' = '+oldvalue+' --> '+newvalue
+          params.(wheretag) = override_params.(i)
+          pass += 1
+        ENDIF ELSE BEGIN
+          EBDETECT_FEEDBACK, 'Tag '+override_tags[i]+' could not be found in '+$
+            'EBDETECT parameter structure. Please check that the tag name '+$
+            'supplied to OVERRIDE_PARAMS is correct.', /WARNING
+        ENDELSE
+      ENDFOR
+    ENDIF ELSE BEGIN 
+      EBDETECT_FEEDBACK,'OVERRIDE_PARAMS is not a structure. Parameters from '+$
+        'configuration file will not be overridden.', /WARNING
+    ENDELSE
+  ENDIF
 
   ; Read in variables
   feedback_txt = 'processing variables and switches.'
