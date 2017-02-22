@@ -284,6 +284,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 
   EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
   IF (verbose EQ 3) THEN STOP
+  stop
 
 ;===============================================================================
 ;======================== Create/set summed cube files =========================
@@ -299,7 +300,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       '> Creating summed wing cube...'
     EBDETECT_MAKE_SUMCUBE, params.inputdir+params.inputfile, $
       params.wsum_pos, NLP=params.nlp, $
-      OUTPUTFILENAME=params.outputdir+wsum_cube_filename, $
+      OUTPUTFILENAME=wsum_cube_filename, $
       WRITE_INPLACE=params.write_inplace, OUTDIR=params.outputdir
     sum_cube = params.outputdir+wsum_cube_filename
     IF (verbose GE 2) THEN EBDETECT_FEEDBACK, /STATUS, /DONE
@@ -314,7 +315,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       '> Creating summed line center cube...'
     EBDETECT_MAKE_SUMCUBE, params.inputdir+params.inputfile, $
       params.lcsum_pos, NLP=params.nlp, $
-      OUTPUTFILENAME=params.outputdir+'lcsum_'+FILE_BASENAME(params.inputfile), $
+      OUTPUTFILENAME=lcsum_cube_filename, $
       WRITE_INPLACE=params.write_inplace, OUTDIR=params.outputdir
     IF (verbose GE 2) THEN EBDETECT_FEEDBACK, /STATUS, /DONE
   ENDIF ELSE $
