@@ -284,7 +284,6 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 
   EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
   IF (verbose EQ 3) THEN STOP
-  stop
 
 ;===============================================================================
 ;======================== Create/set summed cube files =========================
