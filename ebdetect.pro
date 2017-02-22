@@ -111,7 +111,15 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
             newvalue = '['+STRCOMPRESS(STRJOIN(override_params.(i),','),/REMOVE_ALL)+']'
           EBDETECT_FEEDBACK, STRJOIN(REPLICATE(' ',14))+$
             STRUPCASE(override_tags[i])+' = '+oldvalue+' --> '+newvalue
-          params.(wheretag) = override_params.(i)
+          IF (N_ELEMENTS(override_params.(i)) NE $
+            N_ELEMENTS(params.(wheretag))) THEN BEGIN
+            params = EBDETECT_TAG_DELETE(params, override_tags[i])
+            params = CREATE_STRUCT(params, override_tags[i], override_params.(i))
+          ENDIF ELSE BEGIN
+            wheretag_new = WHERE(STRLOWCASE(TAG_NAMES(params)) EQ $
+              STRLOWCASE(override_tags[i]))
+            params.(wheretag_new) = override_params.(i)
+          ENDELSE
           pass += 1
         ENDIF ELSE BEGIN
           EBDETECT_FEEDBACK, 'Tag '+override_tags[i]+' could not be found in '+$
@@ -228,9 +236,24 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 
   ; Set output filenames
   suffix = '.'+(STRSPLIT(FILE_BASENAME(params.inputfile), '.', /EXTRACT))[-1] 
-  outfilename_base = 'ebdetect_stdev'+STRJOIN(STRTRIM($
-    params.sigma_constraint,2),'-')+'_'+$
-    FILE_BASENAME(params.inputfile, suffix)
+  outfilename_base = 'ebdetect'
+  sigma_label = '_stdev'
+  IF (N_ELEMENTS(params.sigma_constraint) GT 1) THEN $
+    sigma_label +=STRJOIN(STRTRIM(params.sigma_constraint,2),'-') $
+  ELSE $
+    sigma_label +=STRTRIM(params.sigma_constraint,2)
+  IF params.lc_constraint THEN $
+    lc_label = '_lcsdv'+STRTRIM(params.lc_sigma,2) $
+  ELSE lc_label = ''
+  time_label = '_lifet' 
+  IF (N_ELEMENTS(params.lifetime_constraint) GT 1) THEN $
+    time_label +=STRJOIN(STRTRIM(params.lifetime_constraint,2),'-') $
+  ELSE $
+    time_label +=STRTRIM(params.lifetime_constraint,2)
+
+  
+  outfilename_base += sigma_label+lc_label+time_label+$
+    '_'+FILE_BASENAME(params.inputfile, suffix)
   running_mean_idlsave = outfilename_base + '_running_mean_sdev.idlsave'
   detect_init_idlsave = outfilename_base + '_init.idlsave'
   detect_overlap_idlsave = outfilename_base + '_overlap.idlsave'
@@ -238,6 +261,26 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   overlap_mask_filename = outfilename_base + '_overlap.maskcube'
   final_mask_filename = outfilename_base + '_final.maskcube'
   kernel_mask_filename = outfilename_base + '_final_kernels.maskcube'
+
+  IF (verbose GE 2) THEN BEGIN
+    IF params.write_detect_init THEN $
+      EBDETECT_FEEDBACK, 'Initial detections will be written to:     '+$
+        detect_init_idlsave
+    IF params.write_detect_overlap THEN BEGIN
+      EBDETECT_FEEDBACK, 'Overlapping detections will be written to: '+$
+        detect_overlap_idlsave
+      IF params.write_mask THEN $
+        EBDETECT_FEEDBACK, 'Overlap detection mask will be written to: '+$
+          overlap_mask_filename
+    ENDIF
+    IF params.write_detect_final THEN BEGIN
+      EBDETECT_FEEDBACK, 'Final detections will be written to:       '+$
+        detect_final_idlsave
+      IF params.write_mask THEN $
+        EBDETECT_FEEDBACK, 'Final detection mask will be written to:   '+$
+          final_mask_filename
+    ENDIF
+  ENDIF
 
   EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
   IF (verbose EQ 3) THEN STOP
