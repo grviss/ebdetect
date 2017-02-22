@@ -639,7 +639,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 	tt = 0
 	first_detect = 0
   ; Necessary while loop as the first frame(s) might not contain any detection
-	WHILE (first_detect EQ 0) DO BEGIN
+	WHILE ((first_detect EQ 0) AND (tt LT params.nt)) DO BEGIN
 		IF ((*results[tt]).ndetect GT 0) THEN BEGIN
 			detect_counter = LONG((*(*results[tt]).structs[(*results[tt]).ndetect-1]).label)
 			first_detect = 1
