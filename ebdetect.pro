@@ -191,10 +191,13 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   params.nx = nx
   params.ny = ny
   params.nt = nt
+  ; First set full_lcsum_cube_filename according to input
   IF (params.lcsum_cube NE '') THEN $
-    lcsum_cube_exists = FILE_TEST(params.inputdir + params.lcsum_cube) $
+    full_lcsum_cube_filename = params.inputdir + params.lcsum_cube $
   ELSE $
-    lcsum_cube_exists = FILE_TEST(params.outputdir + lcsum_cube_filename)
+    full_lcsum_cube_filename = params.outputdir + lcsum_cube_filename
+  ; Check that it actually exists
+  lcsum_cube_exists = FILE_TEST(full_lcsum_cube_filename)
 	IF (params.detect_init_file NE '') THEN detect_init_file_exists = $
     FILE_TEST(params.outputdir + params.detect_init_file)
   IF (params.comparison_mask NE '') THEN $
@@ -301,24 +304,26 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       params.wsum_pos, NLP=params.nlp, $
       OUTPUTFILENAME=wsum_cube_filename, $
       WRITE_INPLACE=params.write_inplace, OUTDIR=params.outputdir
-    sum_cube = params.outputdir+wsum_cube_filename
+    wsum_cube_exists = 1
+    full_wsum_cube_filename = params.outputdir+wsum_cube_filename
     IF (verbose GE 2) THEN EBDETECT_FEEDBACK, /STATUS, /DONE
-  ENDIF ELSE $
-    sum_cube = full_wsum_cube_filename
+  ENDIF 
      
   ; Create summed "line-center" cube if multiple positions around line center
-  ; are given
-  IF (params.lc_constraint AND (lcsum_cube_exists NE 1) AND $
-    (N_ELEMENTS(params.lcsum_pos) GE 1)) THEN BEGIN
+  ; are given, LC_CONSTRAINT is set and LCSUM_CUBE does not exist
+  IF (params.lc_constraint AND (N_ELEMENTS(params.lcsum_pos) GE 1) AND $
+    (lcsum_cube_exists NE 1)) THEN BEGIN
     IF (verbose GE 2) THEN EBDETECT_FEEDBACK, /STATUS, $
       '> Creating summed line center cube...'
     EBDETECT_MAKE_SUMCUBE, params.inputdir+params.inputfile, $
       params.lcsum_pos, NLP=params.nlp, $
       OUTPUTFILENAME=lcsum_cube_filename, $
       WRITE_INPLACE=params.write_inplace, OUTDIR=params.outputdir
+    ; Now it exists and set the full filename
+    lcsum_cube_exists = 1
+    full_lcsum_cube_filename = params.outputdir+lcsum_cube_filename
     IF (verbose GE 2) THEN EBDETECT_FEEDBACK, /STATUS, /DONE
-  ENDIF ELSE $
-    lcsum_cube = params.inputdir+params.lcsum_cube
+  ENDIF 
 
   IF (verbose GE 2) THEN BEGIN
     EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
@@ -353,9 +358,9 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
             selpix = WHERE(LP_GET(params.region_threshold,tt) EQ 1)
             IF (t NE 0) THEN $
               tmp_mean_summed_cube = [running_mean_summed_cube, $
-                                      (LP_GET(sum_cube,tt))[selpix]] $
+                                      (LP_GET(full_wsum_cube_filename,tt))[selpix]] $
             ELSE $
-              tmp_mean_summed_cube = [(LP_GET(sum_cube,tt))[selpix]]
+              tmp_mean_summed_cube = [(LP_GET(full_wsum_cube_filename,tt))[selpix]]
           ENDFOR
           running_mean_summed_cube[t] = MEAN(tmp_mean_summed_cube, /DOUBLE ,/NAN)
           ; Determine the standard deviation in the cube
@@ -375,7 +380,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       summed_cube = FLTARR(params.nx,params.ny,params.nt)
       t0 = SYSTIME(/SECONDS)
       FOR t=0,params.nt-1 DO BEGIN
-        summed_cube[*,*,t] = LP_GET(sum_cube,t)
+        summed_cube[*,*,t] = LP_GET(full_wsum_cube_filename,t)
         IF (verbose GE 1) THEN EBDETECT_TIMER,t+1,params.nt,t0, /DONE, $
           EXTRA_OUTPUT='Getting summed wing cube in memory...', $
           TOTAL_TIME=(verbose GE 2)
@@ -392,9 +397,10 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
             selpix = WHERE(LP_GET(params.region_threshold,t) EQ 1, count)
             IF (count NE 0) THEN BEGIN
               IF (t EQ 0) THEN $
-                sel_summed_cube = [(LP_GET(sum_cube,t))[selpix]] $
+                sel_summed_cube = (summed_cube[*,*,t])[selpix] $
               ELSE $
-                sel_summed_cube = [sel_summed_cube, (LP_GET(sum_cube,t))[selpix]]
+                sel_summed_cube = [sel_summed_cube, $
+                                  (summed_cube[*,*,t])[selpix]]
             ENDIF
             IF (verbose GE 1) THEN $
               EBDETECT_TIMER,t+1,params.nt,t0, /DONE, TOTAL_TIME=(verbose GE 2), $
@@ -411,14 +417,17 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     ENDELSE
 
     ; Determine line center constraints if any given
+    ; No need to check for lcsum_cube_exists: if it didn't before, this has been
+    ; caught and remedied previously
     IF KEYWORD_SET(params.lc_constraint) THEN BEGIN
       lc_summed_cube = FLTARR(params.nx,params.ny,params.nt)
-      IF lcsum_cube_exists THEN $
-        FOR t=0,params.nt-1 DO lc_summed_cube[0,0,t] = LP_GET(lcsum_cube,t) $
-      ELSE BEGIN
-        FOR t=0,params.nt-1 DO $
-          lc_summed_cube[0,0,t] = LP_GET(inputfile,t*nlp+params.lcsum_pos)
-      ENDELSE
+      t0 = SYSTIME(/SECONDS)
+      FOR t=0,params.nt-1 DO BEGIN
+        lc_summed_cube[0,0,t] = LP_GET(full_lcsum_cube_filename,t) 
+        IF (verbose GE 1) THEN EBDETECT_TIMER,t+1,params.nt,t0, /DONE, $
+          EXTRA_OUTPUT='Getting summed line core cube in memory...', $
+          TOTAL_TIME=(verbose GE 2)
+      ENDFOR
       IF (N_ELEMENTS(params.region_threshold) GE 1) THEN BEGIN
         IF (N_ELEMENTS(params.region_threshold) EQ 4) THEN $
           sel_lc_summed_cube = $
@@ -430,9 +439,10 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
             lc_selpix = WHERE(LP_GET(params.region_threshold,t) EQ 1, count)
             IF (count NE 0) THEN BEGIN
               IF (t EQ 0) THEN $
-                sel_lc_summed_cube = [(LP_GET(lcsum_cube,t))[lc_selpix]] $
+                sel_lc_summed_cube = (lc_summed_cube[*,*,t])[lc_selpix] $
               ELSE $
-                sel_lc_summed_cube = [sel_lc_summed_cube, (LP_GET(lcsum_cube,t))[lc_selpix]]
+                sel_lc_summed_cube = [sel_lc_summed_cube, $
+                                      (lc_summed_cube[*,*,t])[lc_selpix]]
             ENDIF
             IF (verbose GE 1) THEN $
               EBDETECT_TIMER,t+1,params.nt,t0, /DONE, TOTAL_TIME=(verbose GE 2), $
@@ -468,7 +478,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 		t0 = SYSTIME(/SECONDS)
 		FOR t=0L,params.nt-1 DO BEGIN
 			mask = BYTARR(params.nx,params.ny)                           
-			select_summed_cube = LP_GET(sum_cube,t)
+			select_summed_cube = LP_GET(full_wsum_cube_filename,t)
       ; Select the pixels where cube intensity > mean intensity + sigma * stdev
       IF KEYWORD_SET(RUNNING_MEAN) THEN BEGIN
         mean_summed_cube = running_mean_summed_cube[t]
@@ -492,12 +502,8 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 
       ; Process line center condition, i.e., I < lc_threshold
       IF KEYWORD_SET(params.lc_constraint) THEN BEGIN
-        IF lcsum_cube_exists THEN $
-          select_lc_cube = LP_GET(lcsum_cube,t) $
-        ELSE $
-          select_lc_cube = LP_GET(inputfile,t*nlp+params.lcsum_pos)
         lc_threshold = mean_lc_cube + params.lc_sigma[0]*sdev_lc_cube
-        wheregtlc = WHERE(select_lc_cube GT lc_threshold, lc_count)
+        wheregtlc = WHERE(lc_summed_cube[*,*,t] GT lc_threshold, lc_count)
         IF (lc_count NE 0) THEN mask[wheregtlc] = 0B
       ENDIF
 
@@ -876,7 +882,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 			FOR j=0,(*results[t]).ndetect-1 DO $
         mask[(*(*results[t]).structs[j]).pos] = 1B
 			IF ((verbose GE 2) AND ~KEYWORD_SET(NO_PLOT)) THEN BEGIN
-				TV,CONGRID(BYTSCL(LP_GET(sum_cube,t),/NAN),750*dataratio,750)
+				TV,CONGRID(BYTSCL(LP_GET(full_wsum_cube_filename,t),/NAN),750*dataratio,750)
 				LOADCT,13,/SILENT
 				CONTOUR,CONGRID(mask,750*dataratio,750),COLOR=255, LEVELS = 1, /ISOTROPIC, $
           XS=13,YS=13,POSITION=[0,0,1,1],/NORMAL,/NOERASE
@@ -1422,7 +1428,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   ; Create mask from final selection of detections
 	FOR t=0,params.nt-1 DO BEGIN													
 		IF ((verbose GE 2) AND ~KEYWORD_SET(NO_PLOT)) THEN BEGIN
-	    TV,CONGRID(BYTSCL(LP_GET(sum_cube,t),/NAN),750*dataratio,750)
+	    TV,CONGRID(BYTSCL(LP_GET(full_wsum_cube_filename,t),/NAN),750*dataratio,750)
 			LOADCT,13,/SILENT
 			CONTOUR,CONGRID(sel_detect_mask[*,*,t],750*dataratio,750),COLOR=255, $
         LEVELS=1, /ISOTROPIC, XS=13,YS=13,POSITION=[0,0,1,1], /NORMAL, /NOERASE
