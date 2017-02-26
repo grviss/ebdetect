@@ -69,7 +69,7 @@
 ;-
 ;
 PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
-  NO_PLOT=no_plot
+  NO_PLOT=no_plot, OVERWRITE=overwrite
 
 ;============================================================================== 
 
@@ -638,6 +638,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 ;	totpasses = 0L
 	tt = 0
 	first_detect = 0
+  detect_counter = -1
   ; Necessary while loop as the first frame(s) might not contain any detection
 	WHILE ((first_detect EQ 0) AND (tt LT params.nt)) DO BEGIN
 		IF ((*results[tt]).ndetect GT 0) THEN BEGIN
@@ -938,7 +939,10 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     feedback_txt = 'Grouping detections and applying lifetime constraints.'
     EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
   ENDIF
-	detections = PTRARR(detect_counter,/ALLOCATE_HEAP)
+	IF (detect_counter NE -1) THEN $
+    detections = PTRARR(detect_counter,/ALLOCATE_HEAP) $
+  ELSE $
+    detections = -1
 	sel_detect_idx = -1
 	t0 = SYSTIME(/SECONDS)
   lifetime_max = 0L
@@ -1021,12 +1025,18 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         ', t='+STRTRIM(lifetime,2)+'. So far t_max='+STRTRIM(lifetime_max,2), $
         TOTAL_TIME=(verbose GE 2)
 	ENDFOR
+  IF (sel_detect_idx[0] NE -1) THEN $
+  	nsel_detections_orig = N_ELEMENTS(sel_detect_idx) $
+  ELSE $
+    nsel_detections_orig = 0
+
+
   IF (verbose GE 2) THEN BEGIN
     PRINT,''
     EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
     EBDETECT_FEEDBACK, /STATUS, $
 	    'Final number of detections after lifetime constraint: '+$
-      STRTRIM(N_ELEMENTS(sel_detect_idx),2)
+      STRTRIM(nsel_detections_orig, 2)
     EBDETECT_FEEDBACK, /STATUS, $
       'Detection indices: ['+STRJOIN(STRTRIM(sel_detect_idx,2),',')+']'
 	  IF (verbose EQ 3) THEN STOP
@@ -1036,14 +1046,16 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 ;===================== Construct final detection output =========================
 ;================================================================================
 ; Includes removing detections if so specified as well as getting kernels
-	nsel_detections_orig = N_ELEMENTS(sel_detect_idx)
   IF (params.remove_detections[0] NE -1) THEN $
     nremove_detections = N_ELEMENTS(params.remove_detections) $
   ELSE $
     nremove_detections = 0
   nsel_detections = nsel_detections_orig - nremove_detections
-	sel_detections = PTRARR(nsel_detections,/ALLOCATE_HEAP)
-	sel_detect_mask = BYTARR(params.nx,params.ny,params.nt)
+  IF (nsel_detections_orig GT 0) THEN $
+  	sel_detections = PTRARR(nsel_detections,/ALLOCATE_HEAP) $
+  ELSE $
+    sel_detections = -1
+  sel_detect_mask = BYTARR(params.nx,params.ny,params.nt)
 	IF (verbose GE 2) THEN BEGIN
     t_init = SYSTIME(/SECONDS)
     feedback_txt1 = 'Constructing final detection output.'
@@ -1494,7 +1506,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 	EBDETECT_FEEDBACK, '# after continuity constraints:      '+$
     STRTRIM(detect_counter,2)
 	EBDETECT_FEEDBACK, '# after lifetime constraint:         '+$
-    STRTRIM(N_ELEMENTS(sel_detect_idx),2)
+    STRTRIM(nsel_detections_orig,2)
 	IF KEYWORD_SET(GET_KERNELS) THEN $
     EBDETECT_FEEDBACK, '# of kernels:                        '+$
       STRTRIM(kernel_detect_counter,2)
