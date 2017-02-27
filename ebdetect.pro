@@ -394,7 +394,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         ELSE BEGIN
           t0 = SYSTIME(/SECONDS)
           FOR t=0L,params.nt-1 DO BEGIN
-            selpix = WHERE(LP_GET(params.region_threshold,t) EQ 1, count)
+            selpix = WHERE(LP_GET(params.inputdir+params.region_threshold,t) EQ 1, count)
             IF (count NE 0) THEN BEGIN
               IF (t EQ 0) THEN $
                 sel_summed_cube = (summed_cube[*,*,t])[selpix] $
@@ -436,7 +436,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         ELSE BEGIN
           t0 = SYSTIME(/SECONDS)
           FOR t=0L,params.nt-1 DO BEGIN
-            lc_selpix = WHERE(LP_GET(params.region_threshold,t) EQ 1, count)
+            lc_selpix = WHERE(LP_GET(params.inputdir+params.region_threshold,t) EQ 1, count)
             IF (count NE 0) THEN BEGIN
               IF (t EQ 0) THEN $
                 sel_lc_summed_cube = (lc_summed_cube[*,*,t])[lc_selpix] $
