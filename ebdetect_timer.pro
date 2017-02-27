@@ -89,6 +89,8 @@ PRO EBDETECT_TIMER, pass, npass, t0, EXTRA_OUTPUT=extra_output, $
     ENDIF
     IF KEYWORD_SET(TOTAL_TIME) THEN $
       PRINT,' Total time: '+STRTRIM((totalsectime),2)
+    IF ~KEYWORD_SET(DONE) AND ~KEYWORD_SET(TOTAL_TIME) THEN $
+      PRINT,' ' ; Enter in case no final message is printed
   ENDIF
 
 END
