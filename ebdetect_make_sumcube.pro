@@ -31,6 +31,7 @@
 ;   OUTPUTFILENAME- Filename of output file. Defaults to
 ;                   'sum_'+FILE_BASENAME(Inputfile)
 ;   OUTDIR        - Output directory. Defaults to './'
+;   VERBOSE       - User feedback verbosity. Defaults to not set.
 ;
 ; OUTPUTS:
 ;
@@ -51,20 +52,23 @@
 
 PRO EBDETECT_MAKE_SUMCUBE, inputfile, sum_positions, NLP=nlp, NS=ns, SET_NS=set_ns, $
   NT=nt, FITS=fits, WRITE_INPLACE=write_inplace, OUTPUTFILENAME=outputfilename,$
-  OUTDIR=outdir
+  OUTDIR=outdir, VERBOSE=verbose
 
   id_string = '$Id$'
   IF (N_PARAMS() LT 2) THEN BEGIN
     MESSAGE, id_string, /INFO
     MESSAGE,'Syntax: MK_SUMMED_CUBE, inputfile, sum_positions, NLP=nlp, '+$
       'NS=ns, SET_NS=set_ns, FITS=fits, WRITE_INPLACE=write_inplace, '+$
-      'OUTPUTFILENAME=outputfilename, OUTDIR=outdir',/INFO
+      'OUTPUTFILENAME=outputfilename, OUTDIR=outdir, VERBOSE=verbose',/INFO
     RETURN
   ENDIF
 	IF (N_ELEMENTS(NLP) NE 1) THEN nlp = 2
 	IF (N_ELEMENTS(NS) NE 1) THEN ns = 1
 	IF (N_ELEMENTS(SET_NS) NE 1) THEN set_ns = 0
 	IF (N_ELEMENTS(SUM_POSITIONS) LT 1) THEN sum_positions = INDGEN(nlp)
+  ; Failsafe against out of range sum_positions
+  sum_positions = sum_positions > 0 < 38
+  sum_positions = sum_positions[UNIQ(sum_positions, SORT(sum_positions))]
   IF KEYWORD_SET(FITS) THEN BEGIN
     offset = CRISPEX_FITSPOINTER(inputfile, EXTEN_NO=0, header, /SILENT)
     nx = SXPAR(header, 'NAXIS1')
@@ -83,6 +87,16 @@ PRO EBDETECT_MAKE_SUMCUBE, inputfile, sum_positions, NLP=nlp, NS=ns, SET_NS=set_
     outdir = './'
   IF (N_ELEMENTS(OUTPUTFILENAME) NE 1) THEN $
     outputfilename = 'sum_'+FILE_BASENAME(inputfile)
+  IF KEYWORD_SET(VERBOSE) THEN BEGIN
+    EBDETECT_FEEDBACK, '  Input file dimensions: [nx,ny,nt,nlp,ns]=['+$
+      STRTRIM(nx,2)+','+STRTRIM(ny,2)+','+STRTRIM(nt,2)+','+$
+      STRTRIM(nlp,2)+','+STRTRIM(ns,2)+']'
+    EBDETECT_FEEDBACK, '  Summing over positions: ['+$
+      STRCOMPRESS(STRJOIN(sum_positions,','),/REMOVE_ALL)+']'
+    EBDETECT_FEEDBACK, '  Writing result file "'+outputfilename+'" to "'+$
+      outdir+'"'
+    EBDETECT_FEEDBACK, /DONE 
+  ENDIF
 
   OPENR, lun, inputfile, /GET_LUN, SWAP_ENDIAN=KEYWORD_SET(FITS)
   readfile = ASSOC(lun,MAKE_ARRAY(nx,ny, TYPE=datatype),offset)
