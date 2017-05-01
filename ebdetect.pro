@@ -253,9 +253,13 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     time_label +=STRJOIN(STRTRIM(params.lifetime_constraint,2),'-') $
   ELSE $
     time_label +=STRTRIM(params.lifetime_constraint,2)
-
+  size_label = '_sizec'
+  IF (N_ELEMENTS(params.size_constraint) GT 1) THEN $
+    size_label +=STRJOIN(STRTRIM(params.size_constraint,2),'-') $
+  ELSE $
+    size_label +=STRTRIM(params.size_constraint,2)
   
-  outfilename_base += sigma_label+lc_label+time_label+$
+  outfilename_base += sigma_label+lc_label+time_label+size_label+$
     '_'+FILE_BASENAME(params.inputfile, suffix)
   running_mean_idlsave = outfilename_base + '_running_mean_sdev.idlsave'
   detect_init_idlsave = outfilename_base + '_init.idlsave'
@@ -611,7 +615,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
    ; Write thresholding detections to file
 		IF KEYWORD_SET(params.write_detect_init) THEN BEGIN									
 			ndetections = totnlabels
-			SAVE, results, ndetections, FILENAME=params.outputdir+detect_init_idlsave
+			SAVE, results, ndetections, params, FILENAME=params.outputdir+detect_init_idlsave
 			EBDETECT_FEEDBACK,'Written: '+params.outputdir+detect_init_idlsave, /STATUS
 		ENDIF
 	  IF (verbose EQ 3) THEN STOP
@@ -914,7 +918,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 		IF KEYWORD_SET(params.write_detect_overlap) THEN BEGIN
       ; Write detection save file
 			ndetections = detect_counter
-			SAVE, results, ndetections, FILENAME=params.outputdir+detect_overlap_idlsave
+			SAVE, results, ndetections, params, FILENAME=params.outputdir+detect_overlap_idlsave
 			EBDETECT_FEEDBACK,'> Written: '+params.outputdir+detect_overlap_idlsave, /STATUS
       ; Write cube if needed
       IF (KEYWORD_SET(params.write_mask) AND $
@@ -1483,7 +1487,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
     ENDIF
     ; Write IDL save file
-		SAVE,sel_detections,nsel_detections,filename=params.outputdir+detect_final_idlsave
+		SAVE,sel_detections,nsel_detections,params,filename=params.outputdir+detect_final_idlsave
 		EBDETECT_FEEDBACK, '> Written: '+params.outputdir+detect_final_idlsave
     IF KEYWORD_SET(params.write_mask) THEN BEGIN
   		LP_WRITE,sel_detect_mask, params.outputdir+final_mask_filename
