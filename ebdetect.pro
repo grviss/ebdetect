@@ -540,7 +540,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
               ENDELSE
             ENDIF ELSE structpix = wheregt1[i]
 						nstructpix = N_ELEMENTS(structpix)
-						IF (N_ELEMENTS(SIZE_CONSTRAINT) GE 1) THEN BEGIN
+						IF (N_ELEMENTS(params.size_constraint) GE 1) THEN BEGIN
 							IF ((nstructpix GE min_size) AND (nstructpix LE max_size)) THEN BEGIN
     						IF (nstructpix NE 1) THEN $     ; Added check for limb-to-limb
                   discard_pix = structpix[1:nstructpix-1] $
@@ -1504,7 +1504,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 ;================================================================================
 ;=========================== Output final statistics ============================
 ;================================================================================
-  EBDETECT_FEEDBACK, 'Detection statistics:'
+  EBDETECT_FEEDBACK, 'Detection statistics for '+params.inputfile+':'
   EBDETECT_FEEDBACK, '# after intensity & size thresholds: '+$
     STRTRIM(totnlabels,2)
 	EBDETECT_FEEDBACK, '# after continuity constraints:      '+$
