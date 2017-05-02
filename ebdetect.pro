@@ -252,7 +252,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       int_label +=STRJOIN(STRTRIM(params.sigma_constraint,2),'-') $
     ELSE $
       int_label +=STRTRIM(params.sigma_constraint,2)
-  ENDIF
+  ENDELSE
   IF params.lc_constraint THEN $
     lc_label = '_lcsdv'+STRTRIM(params.lc_sigma,2) $
   ELSE lc_label = ''
