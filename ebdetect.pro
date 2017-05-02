@@ -240,11 +240,19 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   ; Set output filenames
   suffix = '.'+(STRSPLIT(FILE_BASENAME(params.inputfile), '.', /EXTRACT))[-1] 
   outfilename_base = 'ebdetect'
-  sigma_label = '_stdev'
-  IF (N_ELEMENTS(params.sigma_constraint) GT 1) THEN $
-    sigma_label +=STRJOIN(STRTRIM(params.sigma_constraint,2),'-') $
-  ELSE $
-    sigma_label +=STRTRIM(params.sigma_constraint,2)
+  IF (params.intensity_constraint NE !VALUES.F_NAN) THEN BEGIN
+    int_label = '_intyc'
+    IF (N_ELEMENTS(params.intensity_constraint) GT 1) THEN $
+      int_label +=STRJOIN(STRTRIM(params.intensity_constraint,2),'-') $
+    ELSE $
+      int_label +=STRTRIM(params.intensity_constraint,2)
+  ENDIF ELSE BEGIN
+    int_label = '_stdev'
+    IF (N_ELEMENTS(params.sigma_constraint) GT 1) THEN $
+      int_label +=STRJOIN(STRTRIM(params.sigma_constraint,2),'-') $
+    ELSE $
+      int_label +=STRTRIM(params.sigma_constraint,2)
+  ENDIF
   IF params.lc_constraint THEN $
     lc_label = '_lcsdv'+STRTRIM(params.lc_sigma,2) $
   ELSE lc_label = ''
@@ -259,7 +267,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   ELSE $
     size_label +=STRTRIM(params.size_constraint,2)
   
-  outfilename_base += sigma_label+lc_label+time_label+size_label+$
+  outfilename_base += int_label+lc_label+time_label+size_label+$
     '_'+FILE_BASENAME(params.inputfile, suffix)
   running_mean_idlsave = outfilename_base + '_running_mean_sdev.idlsave'
   detect_init_idlsave = outfilename_base + '_init.idlsave'
