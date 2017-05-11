@@ -240,7 +240,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   ; Set output filenames
   suffix = '.'+(STRSPLIT(FILE_BASENAME(params.inputfile), '.', /EXTRACT))[-1] 
   outfilename_base = 'ebdetect'
-  IF (params.intensity_constraint NE !VALUES.F_NAN) THEN BEGIN
+  IF intensity_constraint_set THEN BEGIN
     int_label = '_intyc'
     IF (N_ELEMENTS(params.intensity_constraint) GT 1) THEN $
       int_label +=STRJOIN(STRTRIM(params.intensity_constraint,2),'-') $
