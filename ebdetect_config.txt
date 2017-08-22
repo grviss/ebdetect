@@ -40,6 +40,10 @@ WSUM_POS = [0,2]
 # Defaults: 0
 LCSUM_POS = 1
 
+# optional: pixel x- and y-size in arcsec
+# Defaults: [1,1] 
+ASECPIX = [0.0592, 0.0592]
+
 
 ################################################################################
 ####################### DETECTION PARAMETERS AND SWITCHES ######################

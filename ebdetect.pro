@@ -191,6 +191,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   params.nx = nx
   params.ny = ny
   params.nt = nt
+  pixarea = params.asecpix[0]*params.asecpix[1]
   ; First set full_lcsum_cube_filename according to input
   IF (params.lcsum_cube NE '') THEN $
     full_lcsum_cube_filename = params.inputdir + params.lcsum_cube $
@@ -586,8 +587,12 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 						FOR j=0,nlabels-1 DO BEGIN								
               ; Select the pixels corresponding to current label
 							positions = WHERE(labels EQ label_vals[j])					
+              ; Get the corresponding intensities and flux
+              intensities = select_summed_cube[positions]
+              flux = TOTAL(ABS(intensities) * pixarea)
               ; Write results to pointer
-							*structs[j] = CREATE_STRUCT('label',label_vals[j]+totnlabels,'pos',positions)	
+							*structs[j] = CREATE_STRUCT('label',label_vals[j]+totnlabels,$
+                'pos',positions, 'int', intensities, 'flux', flux)	
 						ENDFOR
 					ENDIF ELSE BEGIN										
             ; If number of structure pixels != the number of label pixels, stop with error
@@ -1025,7 +1030,10 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 		det = PTRARR(nt_arr,/ALLOCATE_HEAP)
     ; Loop over all time steps where detection is present
 		FOR tt=0L,nt_arr-1 DO $
-			*det[tt] = CREATE_STRUCT('pos',(*(*results[t_arr[tt]]).structs[j_arr[tt]]).pos)
+			*det[tt] = $
+        CREATE_STRUCT('pos',(*(*results[t_arr[tt]]).structs[j_arr[tt]]).pos, $
+        'int', (*(*results[t_arr[tt]]).structs[j_arr[tt]]).int, $
+        'flux', (*(*results[t_arr[tt]]).structs[j_arr[tt]]).flux)
     ; Write results grouped by detection with lifetime information
 		*detections[d] = CREATE_STRUCT('label',label_check,'t',t_arr,$
       'lifetime',lifetime,'det',det)				
@@ -1163,13 +1171,18 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   						kernellabel_vals = LINDGEN(nkernellabels)+1
   						kernels = PTRARR(nkernellabels,/ALLOCATE_HEAP)
   						kernels = PTRARR(nkernels,/ALLOCATE_HEAP)
+			        select_summed_cube = LP_GET(full_wsum_cube_filename,t_real)
               ; Loop over all labels
   						FOR j=0,nkernellabels-1 DO BEGIN								
                 ; Select the pixels corresponding to current label
   							kernelpositions = WHERE(kernellabels EQ kernellabel_vals[j])					
+                ; Get the corresponding intensities and flux
+                kernelintensities = select_summed_cube[kernelpositions]
+                kernelflux = TOTAL(ABS(kernelintensities) * pixarea)
                 ; Write results to pointer
   							*kernels[j] = CREATE_STRUCT('label',kernellabel_vals[j]+totnkernellabels,$
-                  'pos',kernelpositions)
+                  'pos',kernelpositions, 'int', kernelintensities, $
+                  'flux',kernelflux)
   						ENDFOR
   					ENDELSE
   				ENDIF ELSE BEGIN
@@ -1418,7 +1431,9 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         ; Loop over all time steps where detection is present
     		FOR tt=0L,nt_arr-1 DO BEGIN											
     			*kernel_det[tt] = $
-            CREATE_STRUCT('pos',(*(*kernelresults[t_arr[tt]]).kernels[j_arr[tt]]).pos)
+            CREATE_STRUCT('pos',(*(*kernelresults[t_arr[tt]]).kernels[j_arr[tt]]).pos,$
+            'int',(*(*kernelresults[t_arr[tt]]).kernels[j_arr[tt]]).int,$
+            'flux',(*(*kernelresults[t_arr[tt]]).kernels[j_arr[tt]]).flux)
     		ENDFOR
         ; Write results grouped by detection with lifetime information
     		*kernel_detections[d] = CREATE_STRUCT('label',label_check,$
