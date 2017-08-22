@@ -1033,10 +1033,14 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 			*det[tt] = $
         CREATE_STRUCT('pos',(*(*results[t_arr[tt]]).structs[j_arr[tt]]).pos, $
         'int', (*(*results[t_arr[tt]]).structs[j_arr[tt]]).int, $
-        'flux', (*(*results[t_arr[tt]]).structs[j_arr[tt]]).flux)
+        'flux', (*(*results[t_arr[tt]]).structs[j_arr[tt]]).flux, $
+        ; Add placeholder for time-dependent centroid
+        'xy', [0.,0.])
     ; Write results grouped by detection with lifetime information
 		*detections[d] = CREATE_STRUCT('label',label_check,'t',t_arr,$
-      'lifetime',lifetime,'det',det)				
+      'lifetime',lifetime,'det',det, $
+      ; Add placeholder for time-averaged centroid
+      'xy', [0.,0.])				
 		IF (verbose GE 1) THEN $
       EBDETECT_TIMER, label_check, detect_counter, t0, $
         EXTRA=extra+' d='+STRTRIM(d,2)+', nt='+$
@@ -1114,10 +1118,19 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   		*sel_detections[detpass] = *detections[sel_detect_idx[dd]]				
   		nt_loc = N_ELEMENTS((*sel_detections[detpass]).t)
       IF KEYWORD_SET(params.get_kernels) THEN kernelresults = PTRARR(nt_loc,/ALLOCATE_HEAP)
+      xy = FLTARR(2,nt_loc)
   		FOR tt=0,nt_loc-1 DO BEGIN 
         t_real = ((*sel_detections[detpass]).t)[tt]
 	  		mask = BYTARR(nx,ny)
 	  		mask[(*(*sel_detections[detpass]).det[tt]).pos] = 1B
+        ; Get geometric centroid
+        CONTOUR, mask, PATH_XY=path_xy, /PATH_DATA_COORDS, PATH_INFO=path_info
+        sel_path_xy = FLTARR(2,path_info[0].n+1)
+        sel_path_xy[*,0:((path_info[0]).n-1)] = path_xy[*,0:((path_info[0]).n-1)]
+        sel_path_xy[*,path_info[0].n] = path_xy[*,0]
+        xy[*,tt] = EBDETECT_GET_CENTROID(sel_path_xy)
+        (*(*sel_detections[detpass]).det[tt]).xy = REFORM(xy[*,tt])
+        ; Add local detection mask to overall detection mask
 	  		sel_detect_mask[*,*,((*sel_detections[detpass]).t)[tt]] += mask
         ; Check for kernel pixels within the detection
         IF KEYWORD_SET(params.get_kernels) THEN BEGIN
@@ -1153,7 +1166,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   							nkernels += 1L
   							totnkernels += 1L
   					ENDIF
-          ENDFOR
+          ENDFOR  ; kk-loop
   				IF (TOTAL(WHERE(kernel_mask GT 0)) NE -1) THEN BEGIN
   					kernellabels = LABEL_REGION(kernel_mask,/ALL_NEIGHBORS)								
             kernellabels = kernellabels[1:params.nx,1:params.ny]                  
@@ -1174,16 +1187,26 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 			        select_summed_cube = LP_GET(full_wsum_cube_filename,t_real)
               ; Loop over all labels
   						FOR j=0,nkernellabels-1 DO BEGIN								
+                tmp_kernel_mask = BYTARR(params.nx,params.ny)
                 ; Select the pixels corresponding to current label
   							kernelpositions = WHERE(kernellabels EQ kernellabel_vals[j])					
                 ; Get the corresponding intensities and flux
                 kernelintensities = select_summed_cube[kernelpositions]
                 kernelflux = TOTAL(ABS(kernelintensities) * pixarea)
+                ; Get the geometric centroid
+                tmp_kernel_mask[kernelpositions] = 1B
+                CONTOUR, tmp_kernel_mask, PATH_XY=path_xy, /PATH_DATA_COORDS, $
+                  PATH_INFO=path_info
+                sel_path_xy = FLTARR(2,path_info[0].n+1)
+                sel_path_xy[*,0:((path_info[0]).n-1)] = path_xy[*,0:((path_info[0]).n-1)]
+                sel_path_xy[*,path_info[0].n] = path_xy[*,0]
+                kernel_xy = EBDETECT_GET_CENTROID(sel_path_xy)
                 ; Write results to pointer
   							*kernels[j] = CREATE_STRUCT('label',kernellabel_vals[j]+totnkernellabels,$
                   'pos',kernelpositions, 'int', kernelintensities, $
-                  'flux',kernelflux)
-  						ENDFOR
+                  'flux',kernelflux, $
+                  'xy', kernel_xy)
+  						ENDFOR  ; j-loop
   					ENDELSE
   				ENDIF ELSE BEGIN
   					nkernellabels = 0
@@ -1193,7 +1216,9 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           *kernelresults[tt] = CREATE_STRUCT('t',t_real,'nkernels',$
             nkernellabels,'kernels',kernels)					
         ENDIF
-	  	ENDFOR
+	  	ENDFOR  ; tt-loop
+      ; Get the detection-average centroid position
+      (*sel_detections[detpass]).xy = MEAN(xy, DIMENSION=2, /NAN)
       IF KEYWORD_SET(params.get_kernels) THEN BEGIN
       	pass = 0L
       	totpasses = 0L
@@ -1253,7 +1278,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       						kernel_overlapped = 1
       						ncor += 1
       					ENDIF
-      				ENDFOR
+      				ENDFOR  ; k-loop
       			ENDWHILE
 
             ; If overlap occurs, assign the labels
@@ -1290,14 +1315,14 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
                   ; Assign the next detection the current detection label
       						(*(*kernelresults[t_usel]).kernels[$
                     k_array[wherenotmaxoverlap[kk]]]).label = kernel_detect_counter 		
-      					ENDFOR
+      					ENDFOR  ; kk-loop
       				ENDELSE
       			ENDIF ELSE $
               extraout = 'No overlap: '+STRTRIM((*(*kernelresults[t]).kernels[j]).label,2)
             IF (verbose GE 1) THEN EBDETECT_TIMER, t+1, nt_loc, t0, $
               EXTRA=extraout, TOTAL_TIME=(verbose GE 2)
-      		ENDFOR
-      	ENDFOR
+      		ENDFOR  ; j-loop
+      	ENDFOR  ; tt-loop
 ;      	last_kernel_detect_counter = kernel_detect_counter
 ;      	IF (verbose EQ 2) THEN STOP
 
@@ -1348,7 +1373,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       							kernel_overlapped = 1
       							ncor += 1
       						ENDIF
-      					ENDFOR
+      					ENDFOR  ; k-loop
       				ENDWHILE			
 
               ; If overlap occured, assign labels
@@ -1373,13 +1398,13 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       									newlabel_set = 1
       								ENDIF
       							ENDWHILE
-      						ENDFOR
+      						ENDFOR  ; tt-loop
       					ENDIF
       				ENDIF
               IF (verbose GE 1) THEN EBDETECT_TIMER,t_dum+1,nt,t0,EXTRA=extraout, $
                 TOTAL_TIME=(verbose GE 2)
-      			ENDFOR
-      		ENDFOR
+      			ENDFOR  ; j-loop
+      		ENDFOR ; t_dum-loop
       	ENDIF
       ENDIF
       detpass += 1
@@ -1429,15 +1454,20 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           kernel_lifetime_max = kernel_lifetime
     		kernel_det = PTRARR(nt_arr,/ALLOCATE_HEAP)
         ; Loop over all time steps where detection is present
+        kernel_xy = FLTARR(2, nt_arr)
     		FOR tt=0L,nt_arr-1 DO BEGIN											
     			*kernel_det[tt] = $
             CREATE_STRUCT('pos',(*(*kernelresults[t_arr[tt]]).kernels[j_arr[tt]]).pos,$
             'int',(*(*kernelresults[t_arr[tt]]).kernels[j_arr[tt]]).int,$
-            'flux',(*(*kernelresults[t_arr[tt]]).kernels[j_arr[tt]]).flux)
+            'flux',(*(*kernelresults[t_arr[tt]]).kernels[j_arr[tt]]).flux, $
+            'xy',(*(*kernelresults[t_arr[tt]]).kernels[j_arr[tt]]).xy)
+          kernel_xy[*,tt] = (*(*kernelresults[t_arr[tt]]).kernels[j_arr[tt]]).xy
     		ENDFOR
+        mean_kernel_xy = MEAN(kernel_xy, DIMENSION=2, /NAN)
         ; Write results grouped by detection with lifetime information
     		*kernel_detections[d] = CREATE_STRUCT('label',label_check,$
-          't',t_real_arr,'lifetime',kernel_lifetime, 'det',kernel_det)				
+          't',t_real_arr,'lifetime',kernel_lifetime, 'det',kernel_det, $
+          'xy', mean_kernel_xy)				
         IF (verbose GE 1) THEN $
     		EBDETECT_TIMER, label_check, detect_counter, t0, $
           EXTRA='d='+STRTRIM(d,2)+', nt='+$
