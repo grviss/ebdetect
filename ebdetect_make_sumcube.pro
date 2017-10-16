@@ -47,6 +47,7 @@
 ;
 ; MODIFICATION HISTORY:
 ;   2016 Nov 30 Gregal Vissers: Taylored version from MK_SUMMED_CUBE
+;   2017 Oct 16 GV: Added handling of 2D array for sum_positions
 ;-
 
 
@@ -67,66 +68,83 @@ PRO EBDETECT_MAKE_SUMCUBE, inputfile, sum_positions, NLP=nlp, NS=ns, SET_NS=set_
 	IF (N_ELEMENTS(SET_NS) NE 1) THEN set_ns = 0
 	IF (N_ELEMENTS(SUM_POSITIONS) LT 1) THEN sum_positions = INDGEN(nlp)
   ; Failsafe against out of range sum_positions
-  sum_positions = sum_positions > 0 < 38
-  sum_positions = sum_positions[UNIQ(sum_positions, SORT(sum_positions))]
-  IF KEYWORD_SET(FITS) THEN BEGIN
-    offset = CRISPEX_FITSPOINTER(inputfile, EXTEN_NO=0, header, /SILENT)
-    nx = SXPAR(header, 'NAXIS1')
-    ny = SXPAR(header, 'NAXIS2')
-    nlp = SXPAR(header, 'NAXIS3')
-    nt = SXPAR(header, 'NAXIS4')
-    datatype = FITS2IDL_TYPE(header, /HEADER)
-  ENDIF ELSE BEGIN
-	  LP_HEADER, inputfile, NX=nx, NY=ny, NT=imnt, DATATYPE=datatype
-    IF (N_ELEMENTS(NT) NE 1) THEN $;BEGIN
-  	  nt = imnt/nlp/ns
-    offset = 512
-  ENDELSE
-
-  IF (N_ELEMENTS(OUTDIR) NE 1) THEN $
-    outdir = './'
-  IF (N_ELEMENTS(OUTPUTFILENAME) NE 1) THEN $
-    outputfilename = 'sum_'+FILE_BASENAME(inputfile)
-  IF KEYWORD_SET(VERBOSE) THEN BEGIN
-    EBDETECT_FEEDBACK, '  Input file dimensions: [nx,ny,nt,nlp,ns]=['+$
-      STRTRIM(nx,2)+','+STRTRIM(ny,2)+','+STRTRIM(nt,2)+','+$
-      STRTRIM(nlp,2)+','+STRTRIM(ns,2)+']'
-    EBDETECT_FEEDBACK, '  Summing over positions: ['+$
-      STRCOMPRESS(STRJOIN(sum_positions,','),/REMOVE_ALL)+']'
-    EBDETECT_FEEDBACK, '  Writing result file "'+outputfilename+'" to "'+$
-      outdir+'"'
-    EBDETECT_FEEDBACK, /DONE 
-  ENDIF
-
-  OPENR, lun, inputfile, /GET_LUN, SWAP_ENDIAN=KEYWORD_SET(FITS)
-  readfile = ASSOC(lun,MAKE_ARRAY(nx,ny, TYPE=datatype),offset)
-  IF ~KEYWORD_SET(WRITE_INPLACE) THEN $
-    summed_cube = MAKE_ARRAY(nx,ny,nt, TYPE=datatype)
-;  summed_cube = FLTARR(nx,ny,nt);MAKE_ARRAY(nx,ny,nt, TYPE=datatype)
-	npass = nt*N_ELEMENTS(sum_positions)
-	pass = 0
-	t0 = SYSTIME(/SECONDS)
-	FOR t=0,nt-1 DO BEGIN
-    tmp_im = FLTARR(nx,ny) ;MAKE_ARRAY(nx,ny,TYPE=datatype)
-		FOR lp=0,N_ELEMENTS(sum_positions)-1 DO BEGIN
-      tmp_im += FLOAT(readfile[t*nlp*ns+sum_positions[lp]*ns+set_ns])
-			pass += 1
-			EBDETECT_TIMER, pass, npass, t0, EXTRA_OUTPUT='(t,lp,s)=('+STRTRIM(t,2)+','+$
-                     STRTRIM(sum_positions[lp],2)+','+STRTRIM(set_ns,2)+').', $
-                     /CALLBY
-		ENDFOR
-	  tmp_im /= FLOAT(N_ELEMENTS(sum_positions))
-    IF KEYWORD_SET(WRITE_INPLACE) THEN $
-      LP_PUT, tmp_im, outdir+outputfilename, t, nt=nt, $
-        KEEP_OPEN=(t NE nt-1) $
+  sum_positions = sum_positions > 0 < nlp-1
+; sum_positions = sum_positions[UNIQ(sum_positions, SORT(sum_positions))]
+  n_dims = SIZE(sum_positions, /N_DIMENSIONS)
+  IF (n_dims LE 2) THEN BEGIN
+    IF (n_dims EQ 2) THEN $
+      nsums = (SIZE(sum_positions, /DIMENSIONS))[n_dims-1] $
     ELSE $
-      summed_cube[*,*,t] = tmp_im
-	ENDFOR
-;	summed_cube /= FLOAT(N_ELEMENTS(sum_positions))
-  IF ~KEYWORD_SET(WRITE_INPLACE) THEN $
-  	LP_WRITE, summed_cube, outdir+outputfilename
-	EBDETECT_FEEDBACK, /STATUS, 'Written: '+outputfilename
-  
-  FREE_LUN, lun
+      nsums = 1
+
+    ; Handle header information
+    IF KEYWORD_SET(FITS) THEN BEGIN
+      offset = CRISPEX_FITSPOINTER(inputfile, EXTEN_NO=0, header, /SILENT)
+      nx = SXPAR(header, 'NAXIS1')
+      ny = SXPAR(header, 'NAXIS2')
+      nlp = SXPAR(header, 'NAXIS3')
+      nt = SXPAR(header, 'NAXIS4')
+      datatype = FITS2IDL_TYPE(header, /HEADER)
+    ENDIF ELSE BEGIN
+	    LP_HEADER, inputfile, NX=nx, NY=ny, NT=imnt, DATATYPE=datatype
+      IF (N_ELEMENTS(NT) NE 1) THEN $;BEGIN
+    	  nt = imnt/nlp/ns
+      offset = 512
+    ENDELSE
+
+    ; Set output location and filename
+    IF (N_ELEMENTS(OUTDIR) NE 1) THEN $
+      outdir = './'
+    IF (N_ELEMENTS(OUTPUTFILENAME) NE 1) THEN $
+      outputfilename = 'sum_'+FILE_BASENAME(inputfile)
+
+    ; Output file information 
+    IF KEYWORD_SET(VERBOSE) THEN BEGIN
+      EBDETECT_FEEDBACK, '  Input file dimensions: [nx,ny,nt,nlp,ns]=['+$
+        STRTRIM(nx,2)+','+STRTRIM(ny,2)+','+STRTRIM(nt,2)+','+$
+        STRTRIM(nlp,2)+','+STRTRIM(ns,2)+']'
+      EBDETECT_FEEDBACK, '  Summing over positions: ['+$
+        STRCOMPRESS(STRJOIN(sum_positions,','),/REMOVE_ALL)+']'
+      EBDETECT_FEEDBACK, '  Writing result file "'+outputfilename+'" to "'+$
+        outdir+'"'
+      EBDETECT_FEEDBACK, /DONE 
+    ENDIF
+
+    ; Start reading input file
+    OPENR, lun, inputfile, /GET_LUN, SWAP_ENDIAN=KEYWORD_SET(FITS)
+    readfile = ASSOC(lun,MAKE_ARRAY(nx,ny, TYPE=datatype),offset)
+    IF ~KEYWORD_SET(WRITE_INPLACE) THEN $
+      summed_cube = MAKE_ARRAY(nx,ny,nt*nsums, TYPE=datatype)
+	  npass = nt*N_ELEMENTS(sum_positions)
+	  pass = 0
+	  t0 = SYSTIME(/SECONDS)
+	  FOR t=0,nt-1 DO BEGIN
+      tmp_im = FLTARR(nx,ny) ;MAKE_ARRAY(nx,ny,TYPE=datatype)
+      FOR ss=0,nsums-1 DO BEGIN
+	  	  FOR lp=0,N_ELEMENTS(sum_positions[*,ss])-1 DO BEGIN
+          tmp_im += FLOAT(readfile[t*nlp*ns+sum_positions[lp,ss]*ns+set_ns])
+	  	  	pass += 1
+	  	  	EBDETECT_TIMER, pass, npass, t0, EXTRA_OUTPUT='(t,lp,s)=('+STRTRIM(t,2)+','+$
+                         STRTRIM(sum_positions[lp],2)+','+STRTRIM(set_ns,2)+').', $
+                         /CALLBY
+	  	  ENDFOR
+	      tmp_im /= FLOAT(N_ELEMENTS(sum_positions[*,ss]))
+        IF KEYWORD_SET(WRITE_INPLACE) THEN $
+          LP_PUT, tmp_im, outdir+outputfilename, t*nsums+ss, nt=nt*nsums, $
+            KEEP_OPEN=(t NE nt-1) $
+        ELSE $
+          summed_cube[*,*,t*nsums+ss] = tmp_im
+      ENDFOR
+	  ENDFOR
+    IF ~KEYWORD_SET(WRITE_INPLACE) THEN $
+    	LP_WRITE, summed_cube, outdir+outputfilename
+	  EBDETECT_FEEDBACK, /STATUS, 'Written: '+outputfilename
+    
+    FREE_LUN, lun
+  ENDIF ELSE BEGIN
+    EBDETECT_FEEDBACK, /ERROR, $
+      'Can only parse 1D or 2D arrays as input to SUM_POSITIONS variable!'
+    RETURN
+  ENDELSE
 
 END
