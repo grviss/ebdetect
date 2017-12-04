@@ -41,8 +41,9 @@
 ; MODIFICATION HISTORY:
 ;   Inspiration from https://en.wikipedia.org/wiki/Centroid
 ;   2017 Aug 22 Gregal Vissers: First version
+;   2017 Dec 4 GV: Fixed error with optional (keyword) parameters
 ;-
-FUNCTION EBDETECT_GET_CENTROID, SelDet
+FUNCTION EBDETECT_GET_CENTROID, SelDet, Mask, DIMS=dims, FLUX=flux
 
   id_string = '$Id$'
   IF (N_PARAMS() LT 1) THEN BEGIN
