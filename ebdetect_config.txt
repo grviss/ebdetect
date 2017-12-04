@@ -34,6 +34,9 @@ INPUTFILE = lcwsum_halpha.2010.06.28.strt.fcube
 NLP = 3
 
 # optional: wing positions to sum over
+# Can be either 1D (e.g., [0,1,4,5]) or 2D array (e.g., [[0,1],[4,5]]). In the
+# latter case thresholding will be performed on the summed [0,1] and [4,5]
+# separately
 WSUM_POS = [0,2]
 
 # optional: line core positions to sum over

@@ -66,6 +66,8 @@
 ;                   the configuration file and updated handling of input keywords
 ;   2016 Dec 02 GV: Version 1.0 
 ;   2017 Feb 21 GV: Added OVERRIDE_PARAMS keyword
+;   2017 Dec 04 GV: Implemented separate thresholding depending on WSUM_POS
+;                   input
 ;-
 ;
 PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
@@ -317,10 +319,20 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       params.wsum_pos, NLP=params.nlp, $
       OUTPUTFILENAME=wsum_cube_filename, $
       WRITE_INPLACE=params.write_inplace, OUTDIR=params.outputdir
+    ; Check whether wsum_pos is actually 2D in case wings are to be dealt with
+    ; separately
+    ndims_wsum = SIZE(params.wsum_pos, /N_DIMENSIONS)
+    IF (ndims_wsum EQ 2) THEN $
+      nwsums = (SIZE(params.wsum_pos, /DIMENSIONS))[ndims_wsum-1] $
+    ELSE $
+      nwsums = 1
     wsum_cube_exists = 1
     full_wsum_cube_filename = params.outputdir+wsum_cube_filename
     IF (verbose GE 2) THEN EBDETECT_FEEDBACK, /STATUS, /DONE
-  ENDIF 
+  ENDIF ELSE BEGIN
+    LP_HEADER, full_wsum_cube_filename, NT=wsumimnt 
+    nwsums = wsumimnt/params.nt
+  ENDELSE
      
   ; Create summed "line-center" cube if multiple positions around line center
   ; are given, LC_CONSTRAINT is set and LCSUM_CUBE does not exist
@@ -369,11 +381,15 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           ; determine average 
           FOR tt=tlow,tupp DO BEGIN
             selpix = WHERE(LP_GET(params.region_threshold,tt) EQ 1)
-            IF (t NE 0) THEN $
-              tmp_mean_summed_cube = [running_mean_summed_cube, $
-                                      (LP_GET(full_wsum_cube_filename,tt))[selpix]] $
-            ELSE $
-              tmp_mean_summed_cube = [(LP_GET(full_wsum_cube_filename,tt))[selpix]]
+            ; Grab wings separately (even though taking the mean over the whole)
+            FOR ss=0,nwsums-1 DO BEGIN
+              IF (t NE 0) THEN $
+                tmp_mean_summed_cube = [running_mean_summed_cube, $
+                  (LP_GET(full_wsum_cube_filename,tt*nwsums+ss))[selpix]] $
+              ELSE $
+                tmp_mean_summed_cube = $
+                  (LP_GET(full_wsum_cube_filename,tt*nwsums+ss))[selpix]
+            ENDFOR
           ENDFOR
           running_mean_summed_cube[t] = MEAN(tmp_mean_summed_cube, /DOUBLE ,/NAN)
           ; Determine the standard deviation in the cube
@@ -390,10 +406,12 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       ENDIF ELSE RESTORE, params.running_mean, VERBOSE=(verbose GT 1)
     ENDIF ELSE BEGIN
       ; Read in summed wing cube
-      summed_cube = FLTARR(params.nx,params.ny,params.nt)
+      summed_cube = FLTARR(params.nx,params.ny,params.nt*nwsums)
       t0 = SYSTIME(/SECONDS)
       FOR t=0,params.nt-1 DO BEGIN
-        summed_cube[*,*,t] = LP_GET(full_wsum_cube_filename,t)
+        FOR ss=0,nwsums-1 DO $
+          summed_cube[*,*,t*nwsums+ss] = $
+            LP_GET(full_wsum_cube_filename,t*nwsums+ss)
         IF (verbose GE 1) THEN EBDETECT_TIMER,t+1,params.nt,t0, /DONE, $
           EXTRA_OUTPUT='Getting summed wing cube in memory...', $
           TOTAL_TIME=(verbose GE 2)
@@ -409,11 +427,13 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           FOR t=0L,params.nt-1 DO BEGIN
             selpix = WHERE(LP_GET(params.inputdir+params.region_threshold,t) EQ 1, count)
             IF (count NE 0) THEN BEGIN
-              IF (t EQ 0) THEN $
-                sel_summed_cube = (summed_cube[*,*,t])[selpix] $
-              ELSE $
-                sel_summed_cube = [sel_summed_cube, $
-                                  (summed_cube[*,*,t])[selpix]]
+              FOR ss=0,nwsums-1 DO BEGIN
+                IF (t EQ 0) THEN $
+                  sel_summed_cube = (summed_cube[*,*,t*nwsums+ss])[selpix] $
+                ELSE $
+                  sel_summed_cube = [sel_summed_cube, $
+                                    (summed_cube[*,*,t*nwsums+ss])[selpix]]
+              ENDFOR
             ENDIF
             IF (verbose GE 1) THEN $
               EBDETECT_TIMER,t+1,params.nt,t0, /DONE, TOTAL_TIME=(verbose GE 2), $
@@ -491,12 +511,15 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 		t0 = SYSTIME(/SECONDS)
 		FOR t=0L,params.nt-1 DO BEGIN
 			mask = BYTARR(params.nx,params.ny)                           
-			select_summed_cube = LP_GET(full_wsum_cube_filename,t)
+			wsum_mask = BYTARR(params.nx,params.ny,nwsums)                           
       ; Select the pixels where cube intensity > mean intensity + sigma * stdev
       IF KEYWORD_SET(RUNNING_MEAN) THEN BEGIN
         mean_summed_cube = running_mean_summed_cube[t]
         sdev = running_sdev[t]
       ENDIF
+      select_summed_cube = FLTARR(params.nx, params.ny, nwsums)
+      FOR ss=0,nwsums-1 DO $
+  			select_summed_cube[0,0,ss] = LP_GET(full_wsum_cube_filename,t*nwsums+ss)
       FOR s=0,nlevels-1 DO BEGIN                      
         ; Allow for hysteresis constraints
         IF intensity_constraint_set THEN $
@@ -507,7 +530,17 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           ELSE $
             threshold = mean_summed_cube+params.sigma_constraint[s]*sdev
         ENDELSE
-  			wheregt = WHERE(select_summed_cube GT threshold, count)			
+        wsum_wheregt = WHERE(select_summed_cube GT threshold, wsum_count)
+        IF (wsum_count NE 0) THEN $
+          wsum_mask[wsum_wheregt] = 1B
+        IF (nwsums GT 1) THEN $
+          wsum_mask_flatten = TOTAL(wsum_mask, 3) $
+        ELSE $
+          wsum_mask_flatten = wsum_mask
+        ; Select based on either AND or OR
+        ; If AND -> WHERE(wsum_mask_flatten EQ nwsums)
+        ; If OR -> WHERE(wsum_mask_flatten GE 1)
+        wheregt = WHERE(wsum_mask_flatten GE 1, count)
         ; Increase mask pixels gt constraint with 1
         IF (count NE 0) THEN $
     			mask[wheregt] += 1B                              
@@ -587,8 +620,9 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 						FOR j=0,nlabels-1 DO BEGIN								
               ; Select the pixels corresponding to current label
 							positions = WHERE(labels EQ label_vals[j])					
+              positions2d = ARRAY_INDICES(labels, positions)
               ; Get the corresponding intensities and flux
-              intensities = select_summed_cube[positions]
+              intensities = select_summed_cube[positions2d[0],positions2d[1],*]
               flux = TOTAL(ABS(intensities) * pixarea)
               ; Write results to pointer
 							*structs[j] = CREATE_STRUCT('label',label_vals[j]+totnlabels,$
@@ -1184,15 +1218,18 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
               ; If nlabel_pix = nkernels_pix, then start writing results
   						kernellabel_vals = LINDGEN(nkernellabels)+1
   						kernels = PTRARR(nkernellabels,/ALLOCATE_HEAP)
-  						kernels = PTRARR(nkernels,/ALLOCATE_HEAP)
-			        select_summed_cube = LP_GET(full_wsum_cube_filename,t_real)
+              select_summed_cube = FLTARR(params.nx, params.ny, nwsums)
+              FOR ss=0,nwsums-1 DO select_summed_cube[0,0,ss] = $
+                LP_GET(full_wsum_cube_filename,t_real*nwsums+ss)
               ; Loop over all labels
   						FOR j=0,nkernellabels-1 DO BEGIN								
                 tmp_kernel_mask = BYTARR(params.nx,params.ny)
                 ; Select the pixels corresponding to current label
   							kernelpositions = WHERE(kernellabels EQ kernellabel_vals[j])					
+  							kernelpositions2d = ARRAY_INDICES(kernellabels, kernelpositions)
                 ; Get the corresponding intensities and flux
-                kernelintensities = select_summed_cube[kernelpositions]
+                kernelintensities = select_summed_cube[kernelpositions2d[0], $
+                  kernelpositions2d[1], *]
                 kernelflux = TOTAL(ABS(kernelintensities) * pixarea)
                 ; Write results to pointer
   							*kernels[j] = CREATE_STRUCT('label',kernellabel_vals[j]+totnkernellabels,$
@@ -1335,7 +1372,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           ENDIF
       		pass = 0L
       		totpasses = 0L
-      		FOR t=0,params.nt-1 DO totpasses += LONG((*kernelresults[t]).nkernels)
+      		FOR t=0,nt_loc-1 DO totpasses += LONG((*kernelresults[t]).nkernels)
       		t0 = SYSTIME(/SECONDS)
           ; Loop over all but the last time step
       		FOR t_dum=0,nt_loc-1 DO BEGIN													
