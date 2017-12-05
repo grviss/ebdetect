@@ -38,6 +38,8 @@
 ; SIDE EFFECTS:
 ;
 ; RESTRICTIONS:
+;   Requires the following function:
+;     EBDETECT_ARRAY_APPEND()
 ;
 ; PROCEDURE:
 ;
@@ -73,15 +75,9 @@ FUNCTION EBDETECT_ARRAY_COMPARE, Array1, Array2, VERBOSE=verbose
   index_array2 = -1
 	WHILE ((i LT narray1) AND (j LT narray2)) DO BEGIN
 		IF (array1[i] EQ array2[j]) THEN BEGIN
-			IF (common_array[0] NE -1) THEN BEGIN
-        common_array = [common_array, array1[i]] 
-        index_array1 = [index_array1, i]
-        index_array2 = [index_array2, j]
-      ENDIF ELSE BEGIN
-        common_array = array1[i]
-        index_array1 = i
-        index_array2 = j
-      ENDELSE
+      common_array = EBDETECT_ARRAY_APPEND(common_array, array1[i])
+      index_array1 = EBDETECT_ARRAY_APPEND(index_array1, i)
+      index_array2 = EBDETECT_ARRAY_APPEND(index_array2, j)
 			i += 1L
 			j += 1L
 		ENDIF ELSE IF (array1[i] LT array2[j]) THEN $

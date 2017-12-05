@@ -382,14 +382,9 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           FOR tt=tlow,tupp DO BEGIN
             selpix = WHERE(LP_GET(params.region_threshold,tt) EQ 1)
             ; Grab wings separately (even though taking the mean over the whole)
-            FOR ss=0,nwsums-1 DO BEGIN
-              IF (t NE 0) THEN $
-                tmp_mean_summed_cube = [running_mean_summed_cube, $
-                  (LP_GET(full_wsum_cube_filename,tt*nwsums+ss))[selpix]] $
-              ELSE $
-                tmp_mean_summed_cube = $
-                  (LP_GET(full_wsum_cube_filename,tt*nwsums+ss))[selpix]
-            ENDFOR
+            FOR ss=0,nwsums-1 DO tmp_mean_summed_cube = $
+              EBDETECT_ARRAY_APPEND(tmp_mean_summed_cube, $
+                (LP_GET(full_wsum_cube_filename,tt*nwsums+ss))[selpix])
           ENDFOR
           running_mean_summed_cube[t] = MEAN(tmp_mean_summed_cube, /DOUBLE ,/NAN)
           ; Determine the standard deviation in the cube
@@ -427,13 +422,9 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           FOR t=0L,params.nt-1 DO BEGIN
             selpix = WHERE(LP_GET(params.inputdir+params.region_threshold,t) EQ 1, count)
             IF (count NE 0) THEN BEGIN
-              FOR ss=0,nwsums-1 DO BEGIN
-                IF (t EQ 0) THEN $
-                  sel_summed_cube = (summed_cube[*,*,t,ss])[selpix] $
-                ELSE $
-                  sel_summed_cube = [sel_summed_cube, $
-                                    (summed_cube[*,*,t,ss])[selpix]]
-              ENDFOR
+              FOR ss=0,nwsums-1 DO $
+                sel_summed_cube = EBDETECT_ARRAY_APPEND(sel_summed_cube, $
+                  (summed_cube[*,*,t,ss])[selpix])
             ENDIF
             IF (verbose GE 1) THEN $
               EBDETECT_TIMER,t+1,params.nt,t0, /DONE, TOTAL_TIME=(verbose GE 2), $
@@ -473,13 +464,9 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           t0 = SYSTIME(/SECONDS)
           FOR t=0L,params.nt-1 DO BEGIN
             lc_selpix = WHERE(LP_GET(params.inputdir+params.region_threshold,t) EQ 1, count)
-            IF (count NE 0) THEN BEGIN
-              IF (t EQ 0) THEN $
-                sel_lc_summed_cube = (lc_summed_cube[*,*,t])[lc_selpix] $
-              ELSE $
-                sel_lc_summed_cube = [sel_lc_summed_cube, $
-                                      (lc_summed_cube[*,*,t])[lc_selpix]]
-            ENDIF
+            IF (count NE 0) THEN $
+              sel_lc_summed_cube = EBDETECT_ARRAY_APPEND(sel_lc_summed_cube, $
+                (lc_summed_cube[*,*,t])[lc_selpix])
             IF (verbose GE 1) THEN $
               EBDETECT_TIMER,t+1,params.nt,t0, /DONE, TOTAL_TIME=(verbose GE 2), $
               EXTRA_OUTPUT='Determining selected summed line center cube pixels...'
@@ -994,12 +981,12 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     detections = PTRARR(detect_counter,/ALLOCATE_HEAP) $
   ELSE $
     detections = -1
-	sel_detect_idx = -1
+	sel_detect_idx = [ ]
 	t0 = SYSTIME(/SECONDS)
   lifetime_max = 0L
 	FOR d=0L,detect_counter-1 DO BEGIN											; Loop over all single detections
-		t_arr = -1
-		j_arr = -1
+		t_arr = [ ]
+		j_arr = [ ]
     label_check = d+1L
     IF (params.limit_group_search NE 0) THEN BEGIN
       ; Find first occurrence of current detection counter
@@ -1036,15 +1023,9 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         ; If the detection label equals the current detection counter
 				IF ((*(*results[t]).structs[j]).label EQ label_check) THEN BEGIN					
           ; Add the time step to the time step array
-					IF (TOTAL(t_arr) NE -1) THEN $
-            t_arr = [t_arr,t] $
-          ELSE $
-            t_arr = t
+          t_arr = EBDETECT_ARRAY_APPEND(t_arr, t)
           ; - Add the detection number for that time step to an array
-					IF (TOTAL(j_arr) NE -1) THEN $
-            j_arr = [j_arr,j] $	
-          ELSE $
-            j_arr = j 
+          j_arr = EBDETECT_ARRAY_APPEND(j_arr, j)
 				ENDIF
 			ENDFOR
 		ENDFOR
@@ -1055,10 +1036,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     ; If the detections lifetime >= lifetime constraint
 		IF ((lifetime GE min_lifetime) AND (lifetime LE max_lifetime)) THEN BEGIN		
       ; Add the detection label to the array of selected detections
-			IF (TOTAL(sel_detect_idx) NE -1) THEN $
-        sel_detect_idx = [sel_detect_idx,d]	$
-      ELSE $
-        sel_detect_idx = d 
+      sel_detect_idx = EBDETECT_ARRAY_APPEND(sel_detect_idx, d)
       extra = 'Selected:    '
 		ENDIF ELSE extra = 'Not selected:'
 		det = PTRARR(nt_arr,/ALLOCATE_HEAP)
@@ -1288,8 +1266,8 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       			;;; Check for splitting events ;;;
       			kernel_overlapped = 0
       			ncor = 0          ; number of detections with which there is overlap
-      			k_array = -1      ; kernel index array
-      			ncomarr = -1      ; array with number of common elements
+      			k_array = [ ]     ; kernel index array
+      			ncomarr = [ ]     ; array with number of common elements
       			t_usel = t
       			t_ubound = (t + params.t_skip_constraint) < (nt_loc-1)
       			WHILE ((kernel_overlapped EQ 0) AND (t_usel LT t_ubound)) DO BEGIN
@@ -1304,14 +1282,9 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       					IF ((N_ELEMENTS(array_compare.common_array) GE $
                     params.overlap_constraint) AND $
                     (TOTAL(array_compare.common_array) NE -1)) THEN BEGIN		
-						      IF (TOTAL(k_array) NE -1) THEN $
-                    k_array = [k_array,k] $
-                  ELSE $
-                    k_array = k 
-						      IF (TOTAL(ncomarr) NE -1) THEN $
-                    ncomarr = [ncomarr,array_compare.ncommon_array] $
-                  ELSE $
-                    ncomarr = array_compare.ncommon_array 
+                  k_array = EBDETECT_ARRAY_APPEND(k_array, k)
+                  ncomarr = EBDETECT_ARRAY_APPEND(ncomarr, $
+                    array_compare.ncommon_array)
       						kernel_overlapped = 1
       						ncor += 1
       					ENDIF
@@ -1383,8 +1356,8 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       				orig_detection = (*(*kernelresults[t]).kernels[j]).pos
       				kernel_overlapped = 0
       				ncor = 0
-      				k_array = -1
-      				ncomarr = -1
+      				k_array = [ ]
+      				ncomarr = [ ]
       				t_lsel = t
       				t_lbound = (t - params.t_skip_constraint) > 0
               ; Check labels and overlap
@@ -1399,14 +1372,9 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 						      IF ((N_ELEMENTS(array_compare.common_array) GE $
                       params.overlap_constraint) AND $
                       (TOTAL(array_compare.common_array) NE -1)) THEN BEGIN		
-						        IF (TOTAL(k_array) NE -1) THEN $
-                      k_array = [k_array,k] $
-                    ELSE $
-                      k_array = k 
-						        IF (TOTAL(ncomarr) NE -1) THEN $
-                      ncomarr = [ncomarr,array_compare.ncommon_array] $
-                    ELSE $
-                      ncomarr = array_compare.ncommon_array 
+                    k_array = EBDETECT_ARRAY_APPEND(k_array, k)
+                    ncomarr = EBDETECT_ARRAY_APPEND(ncomarr, $
+                      array_compare.ncommon_array)
       							kernel_overlapped = 1
       							ncor += 1
       						ENDIF
@@ -1460,9 +1428,9 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       lifetime_max = 0L
       ; Loop over all single detections
     	FOR d=0L,new_kernel_counter-1 DO BEGIN											
-    		t_arr = -1
-        t_real_arr = -1
-    		j_arr = -1
+    		t_arr = [ ]
+        t_real_arr = [ ]
+    		j_arr = [ ]
         label_check = d+1L+last_kernel_detect_counter
         ; Loop over all time steps
     		FOR t=0,nt_loc-1 DO BEGIN												
@@ -1470,17 +1438,10 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     			FOR j=0,(*kernelresults[t]).nkernels-1 DO BEGIN								
             ; If the detection label equals the current detection counter
     				IF ((*(*kernelresults[t]).kernels[j]).label EQ label_check) THEN BEGIN					
-    					IF (TOTAL(t_arr) NE -1) THEN BEGIN
-                t_real_arr = [t_real_arr,(*kernelresults[t]).t]				
-                t_arr = [t_arr,t]
-              ENDIF ELSE BEGIN
-                t_real_arr = (*kernelresults[t]).t 
-                t_arr = t
-              ENDELSE
-    					IF (TOTAL(j_arr) NE -1) THEN $
-                j_arr = [j_arr,j] $
-              ELSE $
-                j_arr = j 
+              t_real_arr = EBDETECT_ARRAY_APPEND(t_real_arr, $
+                (*kernelresults[t]).t)
+              t_arr = EBDETECT_ARRAY_APPEND(t_arr, t)
+              j_arr = EBDETECT_ARRAY_APPEND(j_arr, j)
     				ENDIF
     			ENDFOR
     		ENDFOR
