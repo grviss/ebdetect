@@ -406,11 +406,11 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       ENDIF ELSE RESTORE, params.running_mean, VERBOSE=(verbose GT 1)
     ENDIF ELSE BEGIN
       ; Read in summed wing cube
-      summed_cube = FLTARR(params.nx,params.ny,params.nt*nwsums)
+      summed_cube = FLTARR(params.nx,params.ny,params.nt,nwsums)
       t0 = SYSTIME(/SECONDS)
       FOR t=0,params.nt-1 DO BEGIN
         FOR ss=0,nwsums-1 DO $
-          summed_cube[*,*,t*nwsums+ss] = $
+          summed_cube[*,*,t,ss] = $
             LP_GET(full_wsum_cube_filename,t*nwsums+ss)
         IF (verbose GE 1) THEN EBDETECT_TIMER,t+1,params.nt,t0, /DONE, $
           EXTRA_OUTPUT='Getting summed wing cube in memory...', $
@@ -421,7 +421,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         IF (N_ELEMENTS(params.region_threshold) EQ 4) THEN $
           sel_summed_cube = $
             summed_cube[params.region_threshold[0]:params.region_threshold[2],$
-                        params.region_threshold[1]:params.region_threshold[3],*] $
+                        params.region_threshold[1]:params.region_threshold[3],*,*] $
         ELSE BEGIN
           t0 = SYSTIME(/SECONDS)
           FOR t=0L,params.nt-1 DO BEGIN
@@ -429,10 +429,10 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
             IF (count NE 0) THEN BEGIN
               FOR ss=0,nwsums-1 DO BEGIN
                 IF (t EQ 0) THEN $
-                  sel_summed_cube = (summed_cube[*,*,t*nwsums+ss])[selpix] $
+                  sel_summed_cube = (summed_cube[*,*,t,ss])[selpix] $
                 ELSE $
                   sel_summed_cube = [sel_summed_cube, $
-                                    (summed_cube[*,*,t*nwsums+ss])[selpix]]
+                                    (summed_cube[*,*,t,ss])[selpix]]
               ENDFOR
             ENDIF
             IF (verbose GE 1) THEN $
@@ -442,11 +442,14 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         ENDELSE
       ENDIF ELSE $
         sel_summed_cube = summed_cube
+      ; Reform for STDEV and MEAN calculations
+      sel_summed_cube = REFORM(sel_summed_cube, $
+        [params.nx*params.ny*params.nt, nwsums])
       IF ~KEYWORD_SET(params.factor_sigma) THEN $
         ; Determine the standard deviation in the cube
-  		  sdev = STDDEV(DOUBLE(sel_summed_cube),/NAN) 
+  		  sdev = STDDEV(DOUBLE(sel_summed_cube),/NAN, DIMENSION=1) 
       ; Determine the average of the cube
-  		mean_summed_cube = MEAN(sel_summed_cube, /DOUBLE,/NAN)             
+  		mean_summed_cube = MEAN(sel_summed_cube, DIMENSION=1, /DOUBLE,/NAN)             
     ENDELSE
 
     ; Determine line center constraints if any given
@@ -511,7 +514,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 		t0 = SYSTIME(/SECONDS)
 		FOR t=0L,params.nt-1 DO BEGIN
 			mask = BYTARR(params.nx,params.ny)                           
-			wsum_mask = BYTARR(params.nx,params.ny,nwsums)                           
+			wsum_mask = BYTARR(params.nx,params.ny)                           
       ; Select the pixels where cube intensity > mean intensity + sigma * stdev
       IF KEYWORD_SET(RUNNING_MEAN) THEN BEGIN
         mean_summed_cube = running_mean_summed_cube[t]
@@ -530,20 +533,17 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           ELSE $
             threshold = mean_summed_cube+params.sigma_constraint[s]*sdev
         ENDELSE
-        wsum_wheregt = WHERE(select_summed_cube GT threshold, wsum_count)
-        IF (wsum_count NE 0) THEN $
-          wsum_mask[wsum_wheregt] = 1B
-        IF (nwsums GT 1) THEN $
-          wsum_mask_flatten = TOTAL(wsum_mask, 3) $
-        ELSE $
-          wsum_mask_flatten = wsum_mask
+        FOR ss=0,nwsums-1 DO BEGIN
+          select_summed_cube = LP_GET(full_wsum_cube_filename, t*nwsums+ss)
+          wsum_wheregt = WHERE(select_summed_cube GT threshold[ss], wsum_count)
+          IF (wsum_count NE 0) THEN wsum_mask[wsum_wheregt] += 1B
+        ENDFOR
         ; Select based on either AND or OR
         ; If AND -> WHERE(wsum_mask_flatten EQ nwsums)
         ; If OR -> WHERE(wsum_mask_flatten GE 1)
-        wheregt = WHERE(wsum_mask_flatten GE 1, count)
+        wheregt = WHERE(wsum_mask GE 1, count)
         ; Increase mask pixels gt constraint with 1
-        IF (count NE 0) THEN $
-    			mask[wheregt] += 1B                              
+        IF (count NE 0) THEN mask[wheregt] += 1B                              
       ENDFOR
 
       ; Process line center condition, i.e., I < lc_threshold
