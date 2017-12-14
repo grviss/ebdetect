@@ -565,43 +565,45 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         nwheregt1 = nwheregt0
       ENDELSE
       struct_mask = BYTARR(params.nx+2,params.ny+2) 
-			IF (wheregt1[0] NE -1) THEN BEGIN
+      get_structures = nwheregt1 GE 1
+			IF get_structures THEN BEGIN
 				nstructs = 0L
-        ; Pixel coordinates to be discarded, init val
-				discard_pix = -1                            
-				FOR i=0L,nwheregt1-1 DO BEGIN									; Loop over all selected pixels
-          ; If the considered pixel is not a discarded pixel, begin growing region
-					IF (TOTAL(discard_pix EQ wheregt1[i]) LE 0) THEN BEGIN					
-            IF (nwheregt1 GT 1) THEN BEGIN
-            ; Grow the region of selected pixels touching the selected pixel
-              IF KEYWORD_SET(params.loose_hysteresis) THEN $
-    						structpix = REGION_GROW(pad_mask,wheregt1[i],/ALL)	$
-              ELSE BEGIN
-  						  structpix = REGION_GROW(pad_mask,wheregt1[i],/ALL, THRESH=[1,2])
-              ENDELSE
-            ENDIF ELSE structpix = wheregt1[i]
-						nstructpix = N_ELEMENTS(structpix)
-						IF (N_ELEMENTS(params.size_constraint) GE 1) THEN BEGIN
-							IF ((nstructpix GE min_size) AND (nstructpix LE max_size)) THEN BEGIN
-    						IF (nstructpix NE 1) THEN $     ; Added check for limb-to-limb
-                  discard_pix = structpix[1:nstructpix-1] $
-                ELSE $
-                  discard_pix = -1
-    						struct_mask[structpix] = 1B					; Add the region to the mask
-    						nstructs += 1L
-    						totnstructs += 1L
-              ENDIF
-						ENDIF ELSE BEGIN
-    					IF (nstructpix NE 1) THEN $       ; Added check for limb-to-limb
-                discard_pix = structpix[1:nstructpix-1] $
-              ELSE $
-                discard_pix = -1
-							struct_mask[structpix] = 1B						; Add the region to the mask
+        WHILE get_structures DO BEGIN
+          ; Grow the region if more than one pixel; else assign pixel directly
+          IF (nwheregt1 GT 1) THEN BEGIN
+            IF KEYWORD_SET(params.loose_hysteresis) THEN $
+					  	structpix = REGION_GROW(pad_mask,wheregt1[0],/ALL)	$
+            ELSE BEGIN
+					    structpix = REGION_GROW(pad_mask,wheregt1[0],/ALL, THRESH=[1,2])
+            ENDELSE
+          ENDIF ELSE structpix = wheregt1[0]
+  				nstructpix = N_ELEMENTS(structpix)
+          ; Check the size if constraint set
+  				IF (N_ELEMENTS(params.size_constraint) GE 1) THEN BEGIN
+  					IF ((nstructpix GE min_size) AND (nstructpix LE max_size)) THEN BEGIN
+              struct_mask[struct_pix] = 1B  ; Add the region to the mask
 							nstructs += 1L
 							totnstructs += 1L
-						ENDELSE
-					ENDIF
-				ENDFOR
+            ENDIF
+          ENDIF ELSE BEGIN
+            ; Add the region to the mask anyway if not checking for size
+            struct_mask[struct_pix] = 1B  
+						nstructs += 1L
+						totnstructs += 1L
+          ENDELSE
+          ; Remove region from padded mask and re-evaluate where GT 0
+          pad_mask[struct_pix] = 0B     
+          wheregt0 = WHERE(pad_mask GT 0, nwheregt0)          
+          IF (nlevels GT 1) THEN $
+            ; Where pixels gt upper threshold
+            wheregt1 = WHERE(pad_mask GT 1, nwheregt1) $          
+          ELSE BEGIN
+            wheregt1  = wheregt0
+            nwheregt1 = nwheregt0
+          ENDELSE
+          ; Evaluate whether continue getting structures
+          get_structures = nwheregt1 GE 1
+        ENDWHILE
         ; If there is a valid detection, initiate labelling and writing to
         ; results structure
         IF (TOTAL(WHERE(struct_mask GT 0)) NE -1) THEN BEGIN
@@ -1156,42 +1158,34 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         (*(*sel_detections[detpass]).det[tt]).xy = REFORM(xy[*,tt])
         (*(*sel_detections[detpass]).det[tt]).xy_flux = REFORM(xy_flux[*,tt])
         ; Add local detection mask to overall detection mask
-	  		sel_detect_mask[*,*,((*sel_detections[detpass]).t)[tt]] += mask
+	  		sel_detect_mask[*,*,t_real] += mask
         ; Check for kernel pixels within the detection
         IF KEYWORD_SET(params.get_kernels) THEN BEGIN
-          kernel_mask = BYTARR(params.nx+2,params.ny+2) 
-          loc_detmask = BYTARR(params.nx+2,params.ny+2)
-          loc_detmask[1:params.nx,1:params.ny] = mask
-          loc_detpos = WHERE(mask EQ 1)
+          pad_kernel_mask = BYTARR(params.nx+2,params.ny+2) 
+          kernel_mask = BYTARR(params.nx+2, params.ny+2)
   			  nkernels = 0L
-          ; Pixel coordinates to be discarded, init val
-				  discard_kernelpix = -1                            
           ; mask_cubes contains mask with 1s & 2s (=kernels)
-          tmp_mask = mask_cube[*,*,t_real]     
-          tmp_pad_mask = BYTARR(params.nx+2,params.ny+2)
-          tmp_pad_mask[1:params.nx,1:params.ny] = tmp_mask
-          loc_detpos_pad = WHERE(loc_detmask EQ 1)
+          ; sel_detect_mask is the current selected mask
+          pad_kernel_mask[1:params.nx,1:params.ny] = $
+            REFORM(sel_detect_mask[*,*,t_real]) * REFORM(mask_cube[*,*,t_real])
           ; Kernels are only those pixels that pass the high intensity threshold
-          wherekernelpix = loc_detpos_pad[$
-            WHERE(tmp_pad_mask[loc_detpos_pad] EQ 2,nwherekernel)]
-          FOR kk=0,nwherekernel-1 DO BEGIN
-            ; If the considered pixel is not a discarded pixel, begin growing region
-  					IF (TOTAL(discard_kernelpix EQ wherekernelpix[kk]) LE 0) THEN BEGIN					
-              IF (nwherekernel GT 1) THEN BEGIN
-                ; Grow the region of selected pixels touching the selected pixel
-    		        kernelpix = REGION_GROW(tmp_pad_mask,wherekernelpix[kk],/ALL,THRESH=2)	
-              ENDIF ELSE kernelpix = wherekernelpix[kk]
-  						nkernelpix = N_ELEMENTS(kernelpix)
-      					IF (nkernelpix NE 1) THEN $       ; Added check for limb-to-limb
-                  discard_kernelpix = kernelpix[1:nkernelpix-1] $
-                ELSE $
-                  discard_kernelpix = -1
-  							kernel_mask[kernelpix] = 1B						; Add the region to the mask
-                sel_kernel_mask[*,*,t_real] += kernel_mask[1:nx,1:ny]
-  							nkernels += 1L
-  							totnkernels += 1L
-  					ENDIF
-          ENDFOR  ; kk-loop
+          wherekernelpix = WHERE(pad_kernel_mask EQ 2, nwherekernel)
+          get_kernel_structures = nwherekernel GE 1
+          WHILE get_kernel_structures DO BEGIN
+            IF (nwherekernel GT 1) THEN BEGIN
+              ; Grow the region of selected pixels touching the selected pixel
+  		        kernelpix = REGION_GROW(pad_kernel_mask,wherekernelpix[0],/ALL,THRESH=2)	
+            ENDIF ELSE kernelpix = wherekernelpix[0]
+						nkernelpix = N_ELEMENTS(kernelpix)
+						kernel_mask[kernelpix] = 1B		    ; Add the region to the mask
+            pad_kernel_mask[kernelpix] = 0B   ; Remove region from padded mask
+            sel_kernel_mask[*,*,t_real] += kernel_mask[1:nx,1:ny]
+						nkernels += 1L
+						totnkernels += 1L
+            ; Check whether to continue
+            wherekernelpix = WHERE(pad_kernel_mask EQ 2, nwherekernel)
+            get_kernel_structures = nwherekernel GE 1
+          ENDWHILE
   				IF (TOTAL(WHERE(kernel_mask GT 0)) NE -1) THEN BEGIN
   					kernellabels = LABEL_REGION(kernel_mask,/ALL_NEIGHBORS)								
             kernellabels = kernellabels[1:params.nx,1:params.ny]                  
@@ -1431,7 +1425,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           ' with label '+STRTRIM(detlabel,2)
     ENDELSE
 
-    IF KEYWORD_SET(GET_KERNELS) THEN BEGIN
+    IF KEYWORD_SET(params.get_kernels) THEN BEGIN
     	; Group kernel detections by label
       new_kernel_counter = kernel_detect_counter - last_kernel_detect_counter
     	kernel_detections = PTRARR(new_kernel_counter,/ALLOCATE_HEAP)
@@ -1579,7 +1573,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     STRTRIM(detect_counter,2)
 	EBDETECT_FEEDBACK, '# after lifetime constraint:         '+$
     STRTRIM(nsel_detections_orig,2)
-	IF KEYWORD_SET(GET_KERNELS) THEN $
+	IF KEYWORD_SET(params.get_kernels) THEN $
     EBDETECT_FEEDBACK, '# of kernels:                        '+$
       STRTRIM(kernel_detect_counter,2)
 
