@@ -418,9 +418,15 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
             summed_cube[params.region_threshold[0]:params.region_threshold[2],$
                         params.region_threshold[1]:params.region_threshold[3],*,*] $
         ELSE BEGIN
+          LP_HEADER, params.inputdir+params.region_threshold, $
+            DIMS=dims_region_threshold
+          single_region_mask = (dims_region_threshold EQ 2)
+          IF single_region_mask THEN $
+            selpix = WHERE(LP_GET(params.inputdir+params.region_threshold,0) EQ 1, count)
           t0 = SYSTIME(/SECONDS)
           FOR t=0L,params.nt-1 DO BEGIN
-            selpix = WHERE(LP_GET(params.inputdir+params.region_threshold,t) EQ 1, count)
+            IF ~KEYWORD_SET(single_region_mask) THEN $
+              selpix = WHERE(LP_GET(params.inputdir+params.region_threshold,t) EQ 1, count)
             IF (count NE 0) THEN BEGIN
               FOR ss=0,nwsums-1 DO $
                 sel_summed_cube = EBDETECT_ARRAY_APPEND(sel_summed_cube, $
@@ -461,9 +467,15 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
             lc_summed_cube[params.region_threshold[0]:params.region_threshold[2],$
                            params.region_threshold[1]:params.region_threshold[3],*] $
         ELSE BEGIN
+          LP_HEADER, params.inputdir+params.region_threshold, $
+            DIMS=dims_region_threshold
+          single_region_mask = (dims_region_threshold EQ 2)
+          IF single_region_mask THEN $
+            lc_selpix = WHERE(LP_GET(params.inputdir+params.region_threshold,0) EQ 1, count)
           t0 = SYSTIME(/SECONDS)
           FOR t=0L,params.nt-1 DO BEGIN
-            lc_selpix = WHERE(LP_GET(params.inputdir+params.region_threshold,t) EQ 1, count)
+            IF ~KEYWORD_SET(single_region_mask) THEN $
+              lc_selpix = WHERE(LP_GET(params.inputdir+params.region_threshold,t) EQ 1, count)
             IF (count NE 0) THEN $
               sel_lc_summed_cube = EBDETECT_ARRAY_APPEND(sel_lc_summed_cube, $
                 (lc_summed_cube[*,*,t])[lc_selpix])
