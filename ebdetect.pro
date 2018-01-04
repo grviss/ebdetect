@@ -572,15 +572,15 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           ; Grow the region if more than one pixel; else assign pixel directly
           IF (nwheregt1 GT 1) THEN BEGIN
             IF KEYWORD_SET(params.loose_hysteresis) THEN $
-					  	structpix = REGION_GROW(pad_mask,wheregt1[0],/ALL)	$
+					  	struct_pix = REGION_GROW(pad_mask,wheregt1[0],/ALL)	$
             ELSE BEGIN
-					    structpix = REGION_GROW(pad_mask,wheregt1[0],/ALL, THRESH=[1,2])
+					    struct_pix = REGION_GROW(pad_mask,wheregt1[0],/ALL, THRESH=[1,2])
             ENDELSE
-          ENDIF ELSE structpix = wheregt1[0]
-  				nstructpix = N_ELEMENTS(structpix)
+          ENDIF ELSE struct_pix = wheregt1[0]
+  				nstruct_pix = N_ELEMENTS(struct_pix)
           ; Check the size if constraint set
   				IF (N_ELEMENTS(params.size_constraint) GE 1) THEN BEGIN
-  					IF ((nstructpix GE min_size) AND (nstructpix LE max_size)) THEN BEGIN
+  					IF ((nstruct_pix GE min_size) AND (nstruct_pix LE max_size)) THEN BEGIN
               struct_mask[struct_pix] = 1B  ; Add the region to the mask
 							nstructs += 1L
 							totnstructs += 1L
