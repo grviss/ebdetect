@@ -68,7 +68,7 @@ PRO EBDETECT_MAKE_SUMCUBE, inputfile, sum_positions, NLP=nlp, NS=ns, SET_NS=set_
 	IF (N_ELEMENTS(SET_NS) NE 1) THEN set_ns = 0
 	IF (N_ELEMENTS(SUM_POSITIONS) LT 1) THEN sum_positions = INDGEN(nlp)
   ; Failsafe against out of range sum_positions
-  sum_positions = sum_positions > 0 < nlp-1
+  sum_positions = sum_positions > 0 < (nlp-1)
 ; sum_positions = sum_positions[UNIQ(sum_positions, SORT(sum_positions))]
   n_dims = SIZE(sum_positions, /N_DIMENSIONS)
   IF (n_dims LE 2) THEN BEGIN
