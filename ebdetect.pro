@@ -424,24 +424,29 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           IF single_region_mask THEN $
             selpix = WHERE(LP_GET(params.inputdir+params.region_threshold,0) EQ 1, count)
           t0 = SYSTIME(/SECONDS)
-          FOR t=0L,params.nt-1 DO BEGIN
-            IF ~KEYWORD_SET(single_region_mask) THEN $
-              selpix = WHERE(LP_GET(params.inputdir+params.region_threshold,t) EQ 1, count)
-            IF (count NE 0) THEN BEGIN
-              FOR ss=0,nwsums-1 DO $
-                sel_summed_cube = EBDETECT_ARRAY_APPEND(sel_summed_cube, $
-                  (summed_cube[*,*,t,ss])[selpix])
-            ENDIF
-            IF (verbose GE 1) THEN $
-              EBDETECT_TIMER,t+1,params.nt,t0, /DONE, TOTAL_TIME=(verbose GE 2), $
-                EXTRA_OUTPUT='Determining selected summed wing cube pixels...'
-          ENDFOR            
+          FOR ss=0,nwsums-1 DO BEGIN
+            FOR t=0L,params.nt-1 DO BEGIN
+              IF ~KEYWORD_SET(single_region_mask) THEN $
+                selpix = WHERE(LP_GET(params.inputdir+params.region_threshold,t) EQ 1, count)
+              IF (count NE 0) THEN BEGIN
+                  tmp_sel_summed_cube = EBDETECT_ARRAY_APPEND(tmp_sel_summed_cube, $
+                    (summed_cube[*,*,t,ss])[selpix])
+              ENDIF
+              IF (verbose GE 1) THEN $
+                EBDETECT_TIMER,t+1,params.nt,t0, /DONE, TOTAL_TIME=(verbose GE 2), $
+                  EXTRA_OUTPUT='Determining selected summed wing cube pixels...'
+            ENDFOR            
+            sel_summed_cube = EBDETECT_ARRAY_APPEND(sel_summed_cube, $
+              tmp_sel_summed_cube, DIMS=(1+(nwsums GT 1)))
+            tmp_sel_summed_cube = !NULL
+          ENDFOR
         ENDELSE
-      ENDIF ELSE $
+      ENDIF ELSE BEGIN
         sel_summed_cube = summed_cube
-      ; Reform for STDEV and MEAN calculations
-      sel_summed_cube = REFORM(sel_summed_cube, $
-        [params.nx*params.ny*params.nt, nwsums])
+        ; Reform for STDEV and MEAN calculations
+        sel_summed_cube = REFORM(sel_summed_cube, $
+          [params.nx*params.ny*params.nt, nwsums])
+      ENDELSE
       IF ~KEYWORD_SET(params.factor_sigma) THEN $
         ; Determine the standard deviation in the cube
   		  sdev = STDDEV(DOUBLE(sel_summed_cube),/NAN, DIMENSION=1) 
