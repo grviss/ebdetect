@@ -720,7 +720,6 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 			ENDIF
 			orig_detection = (*(*results[t]).structs[j]).pos
 
-			;;; Check for splitting events ;;;
 			overlapped = 0
 			ncor = 0
 			k_array = -1
@@ -734,9 +733,6 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 					comp_detection = (*(*results[t_usel]).structs[k]).pos
           ; Find the common elements between the considered detections
           array_compare = EBDETECT_ARRAY_COMPARE(orig_detection, comp_detection)
-;					position_label = ' (t,det_orig,t_comp,det_comp)=('+STRTRIM(t,2)+','+$
-;            STRTRIM(j,2)+','+STRTRIM(t_usel,2)+','+STRTRIM(k,2)+$
-;            '). Single detections: '+STRTRIM(detect_counter,2)+'.'
           ; If the number of common elements >= overlap constraint
 					IF ((N_ELEMENTS(array_compare.common_array) GE params.overlap_constraint) AND $
               (TOTAL(array_compare.common_array) NE -1)) THEN BEGIN		
@@ -759,7 +755,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         ; If there is only one that overlaps
         IF (ncor EQ 1) THEN BEGIN
 					oldlabel = (*(*results[t_usel]).structs[k_array[0]]).label 
-          ; Assign the next detection the current detection label
+          ; Assign the current detection label to the next detection
 					(*(*results[t_usel]).structs[k_array[0]]).label = $
             (*(*results[t]).structs[j]).label 		
           extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
@@ -777,13 +773,6 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
             STRTRIM((*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label,2)+','+$
             STRTRIM(ncomarr[0],2)
-					FOR kk=0,nwherenotmaxoverlap-1 DO BEGIN
-						oldlabel = (*(*results[t_usel]).structs[k_array[wherenotmaxoverlap[kk]]]).label 
-						detect_counter += 1L										; - Increase the detection counter by 1
-            ; Assign the next detection the current detection label
-						(*(*results[t_usel]).structs[$
-              k_array[wherenotmaxoverlap[kk]]]).label = detect_counter 		
-					ENDFOR
 				ENDELSE
 			ENDIF ELSE $
         extraout = 'No overlap: '+STRTRIM((*(*results[t]).structs[j]).label,2)
@@ -792,7 +781,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         EXTRA=extraout, TOTAL_TIME=(verbose GE 2)
 		ENDFOR
 	ENDFOR
-	last_detect_counter = detect_counter
+  unique_labels = LINDGEN(detect_counter)+1
   IF (verbose GE 2) THEN BEGIN
     PRINT, ''
     EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
@@ -863,19 +852,21 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 						newlabel = (*(*results[t_lsel]).structs[k_array[wheremaxoverlap[0]]]).label 
             extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
               STRTRIM(newlabel,2)+','+STRTRIM(ncomarr[wheremaxoverlap[0]],2)
-            ;Assign the current detection the previous detection label
+            ;Assign the previous detection label to the current detection
 						(*(*results[t]).structs[j]).label = newlabel						
+            ; Retroactively do this for all detections with that label
 						FOR tt = t+1,nt-1 DO BEGIN
 							kk = 0
 							newlabel_set = 0
-							WHILE ((newlabel_set EQ 0) AND (kk LT (*results[tt]).ndetect-1)) DO BEGIN
-								kk += 1	
+							WHILE ((newlabel_set EQ 0) AND (kk LE (*results[tt]).ndetect-1)) DO BEGIN
 								IF ((*(*results[tt]).structs[kk]).label EQ oldlabel) THEN BEGIN
 									(*(*results[tt]).structs[kk]).label = newlabel
 									newlabel_set = 1
 								ENDIF
+								kk += 1	
 							ENDWHILE
 						ENDFOR
+            unique_labels = unique_labels[WHERE(unique_labels NE oldlabel)]
 					ENDIF
 				ENDIF
         IF (verbose GE 1) THEN EBDETECT_TIMER,t_dum+1,nt,t0,EXTRA=extraout, $
@@ -883,6 +874,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 			ENDFOR
 		ENDFOR
 	ENDIF
+  ndetections = N_ELEMENTS(unique_labels)
 
 ;================================================================================
 ;=========================== Override merging events ============================
@@ -896,6 +888,8 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   				oldlabel = (*(*results[t]).structs[k]).label 
   				IF (oldlabel EQ params.override_merge[2]) THEN BEGIN
   					(*(*results[t]).structs[k]).label = params.override_merge[3]
+            unique_labels[WHERE(unique_labels EQ oldlabel)] = $
+              params.override_merge[3]
             IF (verbose GE 2) THEN $
               EBDETECT_FEEDBACK, '(t,detection,oldlabel,newlabel) => ('+$
   					    STRTRIM(t,2)+','+STRTRIM(k,2)+','+STRTRIM(oldlabel,2)+$
@@ -911,9 +905,10 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   IF (verbose GE 2) THEN BEGIN
     EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
     EBDETECT_FEEDBACK, /STATUS, $
-      'Final number of single detections: '+STRTRIM(detect_counter,2)
+      'Final number of single detections: '+STRTRIM(ndetections,2)
 	  IF (verbose EQ 3) THEN STOP
   ENDIF
+
 
 ;================================================================================
 ;=========================== Display and write results ==========================
@@ -970,7 +965,6 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     ; Save results
 		IF KEYWORD_SET(params.write_detect_overlap) THEN BEGIN
       ; Write detection save file
-			ndetections = detect_counter
 			SAVE, results, ndetections, params, FILENAME=params.outputdir+detect_overlap_idlsave
 			EBDETECT_FEEDBACK,'> Written: '+params.outputdir+detect_overlap_idlsave, /STATUS
       ; Write cube if needed
@@ -996,17 +990,19 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     feedback_txt = 'Grouping detections and applying lifetime constraints.'
     EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
   ENDIF
-	IF (detect_counter NE -1) THEN $
-    detections = PTRARR(detect_counter,/ALLOCATE_HEAP) $
+;	IF (detect_counter NE -1) THEN $
+;    detections = PTRARR(detect_counter,/ALLOCATE_HEAP) $
+	IF (ndetections NE 0) THEN $
+    detections = PTRARR(ndetections,/ALLOCATE_HEAP) $
   ELSE $
     detections = -1
 	sel_detect_idx = [ ]
 	t0 = SYSTIME(/SECONDS)
   lifetime_max = 0L
-	FOR d=0L,detect_counter-1 DO BEGIN											; Loop over all single detections
+	FOR d=0L,ndetections-1 DO BEGIN											; Loop over all single detections
 		t_arr = [ ]
 		j_arr = [ ]
-    label_check = d+1L
+    label_check = unique_labels[d]  ;d+1L
     IF (params.limit_group_search NE 0) THEN BEGIN
       ; Find first occurrence of current detection counter
       t_first = -1L
@@ -1073,7 +1069,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       ; Add placeholder for time-averaged centroids
       'xy', [0.,0.], 'xy_flux', [0.,0.])
 		IF (verbose GE 1) THEN $
-      EBDETECT_TIMER, label_check, detect_counter, t0, $
+      EBDETECT_TIMER, d+1, ndetections, t0, $
         EXTRA=extra+' d='+STRTRIM(d,2)+', nt='+$
         STRTRIM(nt_arr,2)+', t_upp='+STRTRIM(t_arr[nt_arr-1],2)+$
         ', t_low='+STRTRIM(t_arr[0],2)+$
@@ -1084,7 +1080,6 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   	nsel_detections_orig = N_ELEMENTS(sel_detect_idx) $
   ELSE $
     nsel_detections_orig = 0
-
 
   IF (verbose GE 2) THEN BEGIN
     PRINT,''
@@ -1128,8 +1123,6 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     totnkernellabels = 0L
     totnkernels = 0L
     sel_kernel_mask = BYTARR(params.nx,params.ny,params.nt)
-    last_kernel_detect_counter = 0L
-    sum_kernel_detect_counter = 0L
     IF (verbose GE 2) THEN BEGIN
       t_init2 = SYSTIME(/SECONDS)
       feedback_txt2 = 'Getting high-intensity kernels.'
@@ -1328,15 +1321,6 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
                 extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
                   STRTRIM((*(*kernelresults[t_usel]).kernels[$
                   k_array[wheremaxoverlap[0]]]).label,2)+','+STRTRIM(ncomarr[0],2)
-      					FOR kk=0,nwherenotmaxoverlap-1 DO BEGIN
-      						oldlabel = (*(*kernelresults[t_usel]).kernels[$
-                    k_array[wherenotmaxoverlap[kk]]]).label 
-                  ; - Increase the detection counter by 1
-      						kernel_detect_counter += 1L										
-                  ; Assign the next detection the current detection label
-      						(*(*kernelresults[t_usel]).kernels[$
-                    k_array[wherenotmaxoverlap[kk]]]).label = kernel_detect_counter 		
-      					ENDFOR  ; kk-loop
       				ENDELSE
       			ENDIF ELSE $
               extraout = 'No overlap: '+STRTRIM((*(*kernelresults[t]).kernels[j]).label,2)
@@ -1344,7 +1328,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
               EXTRA=extraout, TOTAL_TIME=(verbose GE 2)
       		ENDFOR  ; j-loop
       	ENDFOR  ; tt-loop
-;      	last_kernel_detect_counter = kernel_detect_counter
+        unique_kernellabels = LINDGEN(kernel_detect_counter)+1
 ;      	IF (verbose EQ 2) THEN STOP
 
       	;;; Check for merging events ;;;
@@ -1415,6 +1399,8 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       								ENDIF
       							ENDWHILE
       						ENDFOR  ; tt-loop
+                  unique_kernellabels = unique_kernellabels[$
+                    WHERE(unique_kernellabels NE oldlabel)]
       					ENDIF
       				ENDIF
               IF (verbose GE 1) THEN EBDETECT_TIMER,t_dum+1,nt,t0,EXTRA=extraout, $
@@ -1423,6 +1409,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       		ENDFOR ; t_dum-loop
       	ENDIF
       ENDIF
+      nkerneldetections = N_ELEMENTS(unique_kernellabels)
       detpass += 1
     ENDIF ELSE BEGIN
       IF (verbose GE 2) THEN $
@@ -1432,17 +1419,16 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 
     IF KEYWORD_SET(params.get_kernels) THEN BEGIN
     	; Group kernel detections by label
-      new_kernel_counter = kernel_detect_counter - last_kernel_detect_counter
-    	kernel_detections = PTRARR(new_kernel_counter,/ALLOCATE_HEAP)
+    	kernel_detections = PTRARR(nkerneldetections,/ALLOCATE_HEAP)
     	sel_kernel_detect_idx = -1
     	t0 = SYSTIME(/SECONDS)
       lifetime_max = 0L
       ; Loop over all single detections
-    	FOR d=0L,new_kernel_counter-1 DO BEGIN											
+    	FOR d=0L,nkerneldetections-1 DO BEGIN											
     		t_arr = [ ]
         t_real_arr = [ ]
     		j_arr = [ ]
-        label_check = d+1L+last_kernel_detect_counter
+        label_check = unique_kernellabels[d]  
         ; Loop over all time steps
     		FOR t=0,nt_loc-1 DO BEGIN												
           ; Loop over all detections at each time step
@@ -1483,7 +1469,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           't',t_real_arr,'lifetime',kernel_lifetime, 'det',kernel_det, $
           'xy', mean_kernel_xy, 'xy_flux', mean_kernel_xy_flux)				
         IF (verbose GE 1) THEN $
-    		EBDETECT_TIMER, label_check, detect_counter, t0, $
+    		EBDETECT_TIMER, d+1, nkerneldetections, t0, $
           EXTRA='d='+STRTRIM(d,2)+', nt='+$
           STRTRIM(nt_arr,2)+', t_upp='+STRTRIM(t_arr[nt_arr-1],2)+$
           ', t_low='+STRTRIM(t_arr[0],2)+$
@@ -1495,8 +1481,6 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         *sel_detections[dd] = CREATE_STRUCT(*sel_detections[dd], 'kernel_detections', $
                 kernel_detections)
       ENDIF
-      last_kernel_detect_counter = kernel_detect_counter
-      sum_kernel_detect_counter += new_kernel_counter
     ENDIF
 	ENDFOR
 
