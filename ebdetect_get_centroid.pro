@@ -70,11 +70,11 @@ FUNCTION EBDETECT_GET_CENTROID, SelDet, Mask, DIMS=dims, FLUX=flux
 	cx = 0.
 	cy = 0.
 	FOR i=0,(path_info[0]).n-1 DO BEGIN
-		a += (path_xy[0,i] * path_xy[1,i+1] - path_xy[0,i+1] * path_xy[1,i])
-		cx += (path_xy[0,i] + path_xy[0,i+1]) * (path_xy[0,i] * path_xy[1,i+1] - $
-      path_xy[0,i+1] * path_xy[1,i])
-		cy += (path_xy[1,i] + path_xy[1,i+1]) * (path_xy[0,i] * path_xy[1,i+1] - $
-      path_xy[0,i+1] * path_xy[1,i])
+		a += (sel_path_xy[0,i] * sel_path_xy[1,i+1] - sel_path_xy[0,i+1] * sel_path_xy[1,i])
+		cx += (sel_path_xy[0,i] + sel_path_xy[0,i+1]) * (sel_path_xy[0,i] * sel_path_xy[1,i+1] - $
+      sel_path_xy[0,i+1] * sel_path_xy[1,i])
+		cy += (sel_path_xy[1,i] + sel_path_xy[1,i+1]) * (sel_path_xy[0,i] * sel_path_xy[1,i+1] - $
+      sel_path_xy[0,i+1] * sel_path_xy[1,i])
 	ENDFOR
 	a /= 2.
 	cx /= (6.*a)
@@ -89,7 +89,7 @@ FUNCTION EBDETECT_GET_CENTROID, SelDet, Mask, DIMS=dims, FLUX=flux
     cx_flux = TOTAL(xys[0,*] * SelDet.int) / FLOAT(TOTAL(SelDet.int))
     cy_flux = TOTAL(xys[1,*] * SelDet.int) / FLOAT(TOTAL(SelDet.int))
     xy_flux = [cx_flux, cy_flux]
-  ENDIF
+  ENDIF ELSE xy_flux = !NULL
 
   ; Construct and return result x- and y-coordinates
   result = {xy_geom:xy_geom, xy_flux:xy_flux}
