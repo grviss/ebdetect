@@ -870,7 +870,8 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 								kk += 1	
 							ENDWHILE
 						ENDFOR
-            unique_labels = unique_labels[WHERE(unique_labels NE oldlabel)]
+            IF (newlabel NE oldlabel) THEN $
+              unique_labels = unique_labels[WHERE(unique_labels NE oldlabel)]
 					ENDIF
 				ENDIF
         IF (verbose GE 1) THEN EBDETECT_TIMER,t_dum+1,nt,t0,EXTRA=extraout, $
@@ -1403,8 +1404,9 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       								ENDIF
       							ENDWHILE
       						ENDFOR  ; tt-loop
-                  unique_kernellabels = unique_kernellabels[$
-                    WHERE(unique_kernellabels NE oldlabel)]
+                  IF (newlabel NE oldlabel) THEN $
+                    unique_kernellabels = unique_kernellabels[$
+                      WHERE(unique_kernellabels NE oldlabel)]
       					ENDIF
       				ENDIF
               IF (verbose GE 1) THEN EBDETECT_TIMER,t_dum+1,nt,t0,EXTRA=extraout, $
