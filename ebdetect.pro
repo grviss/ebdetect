@@ -428,7 +428,8 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         ; Reform summed cube as need be
         t0 = SYSTIME(/SECONDS)
         FOR t=0L,params.nt-1 DO BEGIN
-          tlow = (t-params.running_mean) > 0
+          tlow = (t-ROUND(params.running_mean/2.)) > 0 < $
+            (params.nt - 1 - params.running_mean)
           tupp = (tlow + params.running_mean) < (params.nt-1)
           nt_loc = tupp-tlow+1
           subsel_summed_cube = REFORM(sel_summed_cube[*,tlow:tupp,*], $
