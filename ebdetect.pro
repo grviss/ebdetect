@@ -939,7 +939,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 			FOR j=0,(*results[t]).ndetect-1 DO $
         mask[(*(*results[t]).structs[j]).pos] = 1B
 			IF ((verbose GE 2) AND ~KEYWORD_SET(NO_PLOT)) THEN BEGIN
-				TV,CONGRID(BYTSCL(LP_GET(full_wsum_cube_filename,t),/NAN),750*dataratio,750)
+				TV,CONGRID(BYTSCL(LP_GET(full_wsum_cube_filename,t*nwsums),/NAN),750*dataratio,750)
 				LOADCT,13,/SILENT
 				CONTOUR,CONGRID(mask,750*dataratio,750),COLOR=255, LEVELS = 1, /ISOTROPIC, $
           XS=13,YS=13,POSITION=[0,0,1,1],/NORMAL,/NOERASE
@@ -1499,7 +1499,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   ; Create mask from final selection of detections
 	FOR t=0,params.nt-1 DO BEGIN													
 		IF ((verbose GE 2) AND ~KEYWORD_SET(NO_PLOT)) THEN BEGIN
-	    TV,CONGRID(BYTSCL(LP_GET(full_wsum_cube_filename,t),/NAN),750*dataratio,750)
+	    TV,CONGRID(BYTSCL(LP_GET(full_wsum_cube_filename,t*nwsums),/NAN),750*dataratio,750)
 			LOADCT,13,/SILENT
 			CONTOUR,CONGRID(sel_detect_mask[*,*,t],750*dataratio,750),COLOR=255, $
         LEVELS=1, /ISOTROPIC, XS=13,YS=13,POSITION=[0,0,1,1], /NORMAL, /NOERASE
