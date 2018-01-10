@@ -24,9 +24,11 @@ INPUTFILE = lcwsum_halpha.2010.06.28.strt.fcube
 # optional: data cube with a mask that is used to overlay
 #COMPARISON_MASK = 
 
-# optional: initial detection file to start from (result from thresholding
-# only). Defaults: ''
-#DETECT_INIT_FILE = 
+# optional: switch to look for and (if present) read in the initial detection
+# file to start from (result from thresholding only). File should be located in
+# OUTPUTDIR.
+# Defaults: 0 (= do not load)
+#READ_DETECT_INIT = 1
 
 #################### Data characterising keywords and switches
 # required: Number of wavelength positions of the input file 

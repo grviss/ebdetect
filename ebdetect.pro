@@ -68,6 +68,8 @@
 ;   2017 Feb 21 GV: Added OVERRIDE_PARAMS keyword
 ;   2017 Dec 04 GV: Implemented separate thresholding depending on WSUM_POS
 ;                   input
+;   2018 Jan 10 GV: Modified keyword behaviour governing reading in initial
+;                   detection file
 ;-
 ;
 PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
@@ -201,8 +203,6 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     full_lcsum_cube_filename = params.outputdir + lcsum_cube_filename
   ; Check that it actually exists
   lcsum_cube_exists = FILE_TEST(full_lcsum_cube_filename)
-	IF (params.detect_init_file NE '') THEN detect_init_file_exists = $
-    FILE_TEST(params.outputdir + params.detect_init_file)
   IF (params.comparison_mask NE '') THEN $
     comparison_mask_exists = FILE_TEST(params.inputdir + params.comparison_mask)
 
@@ -279,7 +279,10 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   overlap_mask_filename = outfilename_base + '_overlap.maskcube'
   final_mask_filename = outfilename_base + '_final.maskcube'
   kernel_mask_filename = outfilename_base + '_final_kernels.maskcube'
+; Check whether detect_init_idlsave exists
+  detect_init_file_exists = FILE_TEST(params.outputdir + detect_init_idlsave)
 
+  ; Communicate output file names
   IF (verbose GE 2) THEN BEGIN
     IF params.write_detect_init THEN $
       EBDETECT_FEEDBACK, 'Initial detections will be written to:     '+$
@@ -361,7 +364,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 ; Run first detection based on the intensity and size thresholds
 ; Supply SUM_CUBE with filename if not continuing from before
 ; Set keyword WRITE_FIRST_DETECT to write detections to file
-	IF (detect_init_file_exists NE 1) THEN BEGIN
+	IF NOT (params.read_detect_init AND detect_init_file_exists) THEN BEGIN    
     IF (verbose GE 2) THEN BEGIN
       t_init = SYSTIME(/SECONDS)
       feedback_txt = 'Determining average intensities.'
@@ -686,10 +689,11 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     feedback_txt = 'Applying overlap check.'
     EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
   ENDIF
-	IF detect_init_file_exists THEN BEGIN
-    RESTORE, params.outputdir+params.detect_init_file							
+	IF (params.read_detect_init AND detect_init_file_exists) THEN BEGIN
+    RESTORE, params.outputdir+detect_init_idlsave
+	  totnlabels = ndetections
     EBDETECT_FEEDBACK, '> Restored detections from file: '+$
-      params.outputdir+params.detect_init_file
+      params.outputdir+detect_init_idlsave
   ENDIF
 	pass = 0L
 ;	totpasses = 0L

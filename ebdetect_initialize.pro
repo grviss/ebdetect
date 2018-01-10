@@ -56,7 +56,7 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
   result = { $
     ; File and directory names
     inputfile:'', lcsum_cube:'', comparison_mask:'', $
-    detect_init_file:'', inputdir:'./', outputdir:'./', $
+    inputdir:'./', outputdir:'./', $
     ; Detection parameters
     nlp:1L, nx:1L, ny:1L, nt:1L, wsum_pos:0L, lcsum_pos:0L, $
     asecpix:[1L,1L], intensity_constraint:!VALUES.F_NAN, $
@@ -69,8 +69,8 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
     ; Switches
     sum_cube:0B, factor_sigma:0B, get_kernels:0B, $
     lc_constraint:0B, merge_check:1B, split_check:1B, $
-    write_detect_init:1B, write_detect_overlap:1B, write_detect_final:1B, $
-    write_mask:1B, write_inplace:1B, $
+    read_detect_init:0B, write_detect_init:1B, write_detect_overlap:1B,$
+    write_detect_final:1B, write_mask:1B, write_inplace:1B, $
     exit_status:0B }
   tag_names_orig = TAG_NAMES(result)
   ntag_names_orig = N_ELEMENTS(tag_names_orig)
