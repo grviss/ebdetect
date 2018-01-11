@@ -225,6 +225,8 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     region_threshold_set = (TOTAL(params.region_threshold) NE 0) $
   ELSE $
     region_threshold_set = (STRCOMPRESS(params.region_threshold) NE '')
+  read_running_mean = (SIZE(params.running_mean, /TYPE) EQ 7)
+  calc_running_mean = ((read_running_mean EQ 0) AND (params.running_mean NE 0))
   ; Spatial thresholds
   min_size = params.size_constraint[0]
 	IF (N_ELEMENTS(params.size_constraint) GT 1) THEN $
@@ -370,6 +372,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       feedback_txt = 'Determining average intensities.'
       EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
     ENDIF
+    
     ; Read in summed wing cube
     summed_cube = FLTARR(params.nx,params.ny,params.nt,nwsums)
     t0 = SYSTIME(/SECONDS)
@@ -381,84 +384,117 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         EXTRA_OUTPUT='Getting summed wing cube in memory...', $
         TOTAL_TIME=(verbose GE 2)
     ENDFOR
-    ; Select only pixels as defined by REGION_THRESHOLD
-    IF KEYWORD_SET(region_threshold_set) THEN BEGIN
-      IF (N_ELEMENTS(params.region_threshold) EQ 4) THEN $
-        sel_summed_cube = $
-          summed_cube[params.region_threshold[0]:params.region_threshold[2],$
-                      params.region_threshold[1]:params.region_threshold[3],*,*] $
-      ELSE BEGIN
-        LP_HEADER, params.inputdir+params.region_threshold, $
-          DIMS=dims_region_threshold
-        single_region_mask = (dims_region_threshold EQ 2)
-        IF single_region_mask THEN $
-          selpix = WHERE(LP_GET(params.inputdir+params.region_threshold,0) EQ 1, count)
-        t0 = SYSTIME(/SECONDS)
-        FOR ss=0,nwsums-1 DO BEGIN
-          FOR t=0L,params.nt-1 DO BEGIN
-            IF ~KEYWORD_SET(single_region_mask) THEN $
-              selpix = WHERE(LP_GET(params.inputdir+params.region_threshold,t) EQ 1, count)
-            IF (count NE 0) THEN BEGIN
-                tmp_sel_summed_cube = EBDETECT_ARRAY_APPEND(tmp_sel_summed_cube, $
-                  (summed_cube[*,*,t,ss])[selpix])
-            ENDIF
-            IF (verbose GE 1) THEN $
-              EBDETECT_TIMER,t+1,params.nt,t0, /DONE, TOTAL_TIME=(verbose GE 2), $
-                EXTRA_OUTPUT='Determining selected summed wing cube pixels...'
-          ENDFOR            
-          sel_summed_cube = EBDETECT_ARRAY_APPEND(sel_summed_cube, $
-            tmp_sel_summed_cube, DIMS=(1+(nwsums GT 1)))
-          tmp_sel_summed_cube = !NULL
-        ENDFOR
-      ENDELSE
-    ENDIF ELSE $
-      ; Reform for STDEV and MEAN calculations
-      sel_summed_cube = REFORM(summed_cube, $
-        [params.nx*params.ny,params.nt, nwsums])
 
-    ; Process running mean if set
-    IF (N_ELEMENTS(params.running_mean) EQ 1) THEN BEGIN
-      IF (SIZE(params.running_mean,/TYPE) NE 7) THEN BEGIN
+    IF NOT KEYWORD_SET(read_running_mean) THEN BEGIN
+      IF KEYWORD_SET(calc_running_mean) THEN BEGIN
+        ; Initialise variables for RUNNING_MEAN if set and if not reading from file
         running_mean_summed_cube = FLTARR(params.nt,nwsums)
         IF ~KEYWORD_SET(params.factor_sigma) THEN $
           running_sdev = FLTARR(params.nt,nwsums) $
         ELSE $
           running_sdev = !NULL
-        nxy_sel_summed_cube = (SIZE(sel_summed_cube))[1]
-        ; Reform summed cube as need be
+        tlow = (INDGEN(params.nt)-ROUND(params.running_mean/2.)) > 0 < $
+               (params.nt - 1 - params.running_mean)
+        tupp = (tlow + params.running_mean) < (params.nt-1)
+      ENDIF
+
+      ; Process REGION_THRESHOLD and RUNNING_MEAN if set
+      IF KEYWORD_SET(region_threshold_set) THEN BEGIN
+        IF (N_ELEMENTS(params.region_threshold) EQ 4) THEN BEGIN
+          sel_summed_cube = $
+            summed_cube[params.region_threshold[0]:params.region_threshold[2],$
+                        params.region_threshold[1]:params.region_threshold[3],*,*] 
+          nxy_sel_summed_cube = (SIZE(sel_summed_cube))[1:2]
+          nxy = nxy_sel_summed_cube[0]*nxy_sel_summed_cube[1]
+          IF KEYWORD_SET(calc_running_mean) THEN BEGIN
+            sel_summed_cube = REFORM(sel_summed_cube, [nxy, params.nt, nwsums])
+            t0 = SYSTIME(/SECONDS)
+            FOR t=0L,params.nt-1 DO BEGIN
+              subsel_summed_cube = REFORM(sel_summed_cube[*,tlow[t]:tupp[t],*], $
+                [nxy*(params.running_mean+1),nwsums])
+              running_mean_summed_cube[t,*] = MEAN(subsel_summed_cube, $
+                DIMENSION=1, /DOUBLE, /NAN)
+              ; Determine the standard deviation in the cube
+              IF ~KEYWORD_SET(params.factor_sigma) THEN $
+        	  	  running_sdev[t,*] = STDDEV(DOUBLE(subsel_summed_cube), /NAN, $
+                  DIMENSION=1) 
+              IF (verbose GE 1) THEN $
+                EBDETECT_TIMER,t+1,params.nt,t0, /DONE, TOTAL_TIME=(verbose GE 2), $
+                  EXTRA_OUTPUT='Determining running mean...'
+            ENDFOR ; t-loop
+          ENDIF ELSE $
+            sel_summed_cube = REFORM(sel_summed_cube, [nxy*params.nt, nwsums])
+        ENDIF ELSE BEGIN
+          LP_HEADER, params.inputdir+params.region_threshold, $
+            DIMS=dims_region_threshold
+          single_region_mask = (dims_region_threshold EQ 2)
+          IF single_region_mask THEN selpix = WHERE($
+              LP_GET(params.inputdir+params.region_threshold,0) EQ 1, nselpix)
+          t0 = SYSTIME(/SECONDS)
+          FOR ss=0,nwsums-1 DO BEGIN
+            FOR t=0L,params.nt-1 DO BEGIN
+              IF ~KEYWORD_SET(single_region_mask) THEN selpix = WHERE($
+                 LP_GET(params.inputdir+params.region_threshold,t) EQ 1, nselpix)
+              IF (nselpix NE 0) THEN BEGIN
+                IF KEYWORD_SET(calc_running_mean) THEN BEGIN
+                  subsel_summed_cube = (summed_cube[*,*,tlow[t]:tupp[t],ss])[selpix]
+                  running_mean_summed_cube[t,ss] = $
+                    MEAN(subsel_summed_cube, /DOUBLE, /NAN)
+                  ; Determine the standard deviation in the cube
+                  IF ~KEYWORD_SET(params.factor_sigma) THEN $
+        		        running_sdev[t,ss] = STDDEV(DOUBLE(subsel_summed_cube), /NAN)
+                ENDIF ELSE $
+                  tmp_sel_summed_cube = EBDETECT_ARRAY_APPEND(tmp_sel_summed_cube, $
+                    (summed_cube[*,*,t,ss])[selpix])
+              ENDIF ; t-loop
+              IF (verbose GE 1) THEN $
+                EBDETECT_TIMER,t+1,params.nt,t0, /DONE, TOTAL_TIME=(verbose GE 2), $
+                  EXTRA_OUTPUT='Determining selected summed wing cube pixels...'
+            ENDFOR           
+            IF NOT KEYWORD_SET(calc_running_mean) THEN BEGIN
+              sel_summed_cube = EBDETECT_ARRAY_APPEND(sel_summed_cube, $
+                tmp_sel_summed_cube, DIMS=(1+(nwsums GT 1)))
+              tmp_sel_summed_cube = !NULL
+            ENDIF
+          ENDFOR ; ss-loop
+          IF KEYWORD_SET(calc_running_mean) THEN BEGIN
+  	  		  SAVE, running_mean_summed_cube, running_sdev, $
+              FILENAME=params.outputdir+running_mean_idlsave
+            EBDETECT_FEEDBACK, /STATUS, 'Written: '+$
+              params.outputdir+running_mean_idlsave
+          ENDIF
+        ENDELSE
+      ENDIF ELSE IF KEYWORD_SET(calc_running_mean) THEN BEGIN
+        sel_summed_cube = REFORM(summed_cube, $
+          [params.nx*params.ny, params.nt, nwsums])
         t0 = SYSTIME(/SECONDS)
         FOR t=0L,params.nt-1 DO BEGIN
-          tlow = (t-ROUND(params.running_mean/2.)) > 0 < $
-            (params.nt - 1 - params.running_mean)
-          tupp = (tlow + params.running_mean) < (params.nt-1)
-          nt_loc = tupp-tlow+1
-          subsel_summed_cube = REFORM(sel_summed_cube[*,tlow:tupp,*], $
-            [nxy_sel_summed_cube*nt_loc,nwsums])
-          running_mean_summed_cube[t,*] = $
-            MEAN(subsel_summed_cube, DIMENSION=1, /DOUBLE, /NAN)
+          subsel_summed_cube = REFORM(sel_summed_cube[*,tlow[t]:tupp[t],*], $
+            [params.nx*params.ny*(params.running_mean+1),nwsums])
+          running_mean_summed_cube[t,*] = MEAN(subsel_summed_cube, $
+            DIMENSION=1, /DOUBLE, /NAN)
           ; Determine the standard deviation in the cube
           IF ~KEYWORD_SET(params.factor_sigma) THEN $
-      		  running_sdev[t,*] = STDDEV(DOUBLE(subsel_summed_cube), /NAN, $
+   	       running_sdev[t,*] = STDDEV(DOUBLE(subsel_summed_cube), /NAN, $
               DIMENSION=1) 
           IF (verbose GE 1) THEN $
             EBDETECT_TIMER,t+1,params.nt,t0, /DONE, TOTAL_TIME=(verbose GE 2), $
               EXTRA_OUTPUT='Determining running mean...'
-        ENDFOR
-  			SAVE, running_mean_summed_cube, running_sdev, $
-          FILENAME=params.outputdir+running_mean_idlsave
-        EBDETECT_FEEDBACK, /STATUS, 'Written: '+$
-          params.outputdir+running_mean_idlsave
-      ENDIF ELSE RESTORE, params.running_mean, VERBOSE=(verbose GT 1)
-    ENDIF ELSE BEGIN
-      ; Reform for STDEV and MEAN calculations
-      sel_summed_cube = REFORM(summed_cube, $
-        [params.nx*params.ny*params.nt, nwsums])
-      IF ~KEYWORD_SET(params.factor_sigma) THEN $
-        ; Determine the standard deviation in the cube
-		    sdev = STDDEV(DOUBLE(sel_summed_cube),/NAN, DIMENSION=1) 
-      ; Determine the average of the cube
-		  mean_summed_cube = MEAN(sel_summed_cube, DIMENSION=1, /DOUBLE,/NAN)             
-    ENDELSE
+        ENDFOR ; t-loop
+      ENDIF ELSE $
+        ; Reform for STDEV and MEAN calculations
+        sel_summed_cube = REFORM(summed_cube, $
+          [params.nx*params.ny*params.nt, nwsums])
+      ; Calculate mean (and sdev) if not already done for running mean
+      IF NOT KEYWORD_SET(calc_running_mean) THEN BEGIN
+        IF ~KEYWORD_SET(params.factor_sigma) THEN $
+          ; Determine the standard deviation in the cube
+	        sdev = STDDEV(DOUBLE(sel_summed_cube),/NAN, DIMENSION=1) 
+        ; Determine the average of the cube
+	      mean_summed_cube = MEAN(sel_summed_cube, DIMENSION=1, /DOUBLE,/NAN)             
+      ENDIF
+    ENDIF ELSE $
+      RESTORE, params.running_mean, VERBOSE=(verbose GT 1)
 
     ; Determine line center constraints if any given
     ; No need to check for lcsum_cube_exists: if it didn't before, this has been
@@ -526,7 +562,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 			mask = BYTARR(params.nx,params.ny)                           
 			wsum_mask = BYTARR(params.nx,params.ny)                           
       ; Select the pixels where cube intensity > mean intensity + sigma * stdev
-      IF (N_ELEMENTS(params.running_mean) EQ 1) THEN BEGIN
+      IF (KEYWORD_SET(calc_running_mean) OR KEYWORD_SET(read_running_mean)) THEN BEGIN
         mean_summed_cube = running_mean_summed_cube[t,*]
         IF ~KEYWORD_SET(params.factor_sigma) THEN $
           sdev = running_sdev[t,*]
