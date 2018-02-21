@@ -1281,8 +1281,13 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         ENDIF
 	  	ENDFOR  ; tt-loop
       ; Get the detection-average centroid position
-      (*sel_detections[detpass]).xy = MEAN(xy, DIMENSION=2, /NAN)
-      (*sel_detections[detpass]).xy_flux = MEAN(xy_flux, DIMENSION=2, /NAN)
+      IF (nt_loc GT 1) THEN BEGIN
+        (*sel_detections[detpass]).xy = MEAN(xy, DIMENSION=2, /NAN)
+        (*sel_detections[detpass]).xy_flux = MEAN(xy_flux, DIMENSION=2, /NAN)
+      ENDIF ELSE BEGIN
+        (*sel_detections[detpass]).xy = xy
+        (*sel_detections[detpass]).xy_flux = xy_flux
+      ENDELSE
       IF KEYWORD_SET(params.get_kernels) THEN BEGIN
       	pass = 0L
       	totpasses = 0L
@@ -1508,8 +1513,13 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           kernel_xy_flux[*,tt] = $
             (*(*kernelresults[t_arr[tt]]).kernels[j_arr[tt]]).xy_flux
     		ENDFOR
-        mean_kernel_xy = MEAN(kernel_xy, DIMENSION=2, /NAN)
-        mean_kernel_xy_flux = MEAN(kernel_xy_flux, DIMENSION=2, /NAN)
+        IF (nt_loc GT 1) THEN BEGIN
+          mean_kernel_xy = MEAN(kernel_xy, DIMENSION=2, /NAN)
+          mean_kernel_xy_flux = MEAN(kernel_xy_flux, DIMENSION=2, /NAN)
+        ENDIF ELSE BEGIN
+          mean_kernel_xy = kernel_xy
+          mean_kernel_xy_flux = kernel_xy_flux
+        ENDELSE
         ; Write results grouped by detection with lifetime information
     		*kernel_detections[d] = CREATE_STRUCT('label',label_check,$
           't',t_real_arr,'lifetime',kernel_lifetime, 'det',kernel_det, $
