@@ -1121,10 +1121,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         ', t='+STRTRIM(lifetime,2)+'. So far t_max='+STRTRIM(lifetime_max,2), $
         TOTAL_TIME=(verbose GE 2)
 	ENDFOR
-  IF (sel_detect_idx[0] NE -1) THEN $
-  	nsel_detections_orig = N_ELEMENTS(sel_detect_idx) $
-  ELSE $
-    nsel_detections_orig = 0
+	nsel_detections_orig = N_ELEMENTS(sel_detect_idx) 
 
   IF (verbose GE 2) THEN BEGIN
     PRINT,''
