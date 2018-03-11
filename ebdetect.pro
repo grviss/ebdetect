@@ -70,6 +70,7 @@
 ;                   input
 ;   2018 Jan 10 GV: Modified keyword behaviour governing reading in initial
 ;                   detection file
+;   2018 Mar 11 GV: Enabled read-in of overlap detection results
 ;-
 ;
 PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
@@ -283,6 +284,10 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   kernel_mask_filename = outfilename_base + '_final_kernels.maskcube'
 ; Check whether detect_init_idlsave exists
   detect_init_file_exists = FILE_TEST(params.outputdir + detect_init_idlsave)
+  detect_overlap_file_exists = FILE_TEST(params.outputdir + detect_overlap_idlsave)
+  read_detect_init_enable = params.read_detect_init AND detect_init_file_exists
+  read_detect_overlap_enable = params.read_detect_overlap AND detect_overlap_file_exists
+  read_detect_any = read_detect_init_enable OR read_detect_overlap_enable
 
   ; Communicate output file names
   IF (verbose GE 2) THEN BEGIN
@@ -366,7 +371,8 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 ; Run first detection based on the intensity and size thresholds
 ; Supply SUM_CUBE with filename if not continuing from before
 ; Set keyword WRITE_FIRST_DETECT to write detections to file
-	IF NOT (params.read_detect_init AND detect_init_file_exists) THEN BEGIN    
+  IF NOT read_detect_any THEN BEGIN
+;	IF NOT (params.read_detect_init AND detect_init_file_exists) THEN BEGIN    
     IF (verbose GE 2) THEN BEGIN
       t_init = SYSTIME(/SECONDS)
       feedback_txt = 'Determining average intensities.'
@@ -715,318 +721,329 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 			EBDETECT_FEEDBACK,'Written: '+params.outputdir+detect_init_idlsave, /STATUS
 		ENDIF
 	  IF (verbose EQ 3) THEN STOP
-	ENDIF
+	ENDIF ; End check for read_detect_any set
 
-  ; Only process further if at least one detection was made
-  IF (totnlabels NE 0) THEN BEGIN
   ;================================================================================ 
   ;============================ Apply overlapping check ===========================
   ;================================================================================ 
   ; Overlap filter: only propagate cases for which certain overlap criteria are obeyed
   ; All detections at t=0 are "true"
-  ; If a first detection file is supplied, restore it now
-    IF (verbose GE 2) THEN BEGIN
-      t_init = SYSTIME(/SECONDS)
-      feedback_txt = 'Applying overlap check.'
-      EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
-    ENDIF
-  	IF (params.read_detect_init AND detect_init_file_exists) THEN BEGIN
+  ; If no overlap detect file is present, start checking overlap constraints
+  IF NOT read_detect_overlap_enable THEN BEGIN  
+    ; If a first detection file is supplied, restore it now
+  	IF read_detect_init_enable THEN BEGIN
       RESTORE, params.outputdir+detect_init_idlsave
   	  totnlabels = ndetections
       EBDETECT_FEEDBACK, '> Restored detections from file: '+$
         params.outputdir+detect_init_idlsave
     ENDIF
-  	pass = 0L
-  ;	totpasses = 0L
-  	tt = 0
-  	first_detect = 0
-    detect_counter = -1
-    ; Necessary while loop as the first frame(s) might not contain any detection
-  	WHILE ((first_detect EQ 0) AND (tt LT params.nt)) DO BEGIN
-  		IF ((*results[tt]).ndetect GT 0) THEN BEGIN
-  			detect_counter = LONG((*(*results[tt]).structs[(*results[tt]).ndetect-1]).label)
-  			first_detect = 1
-  		ENDIF
-  		tt += 1
-  	ENDWHILE
-  ;	FOR t=0L,params.nt-2 DO totpasses += LONG((*results[t]).ndetect)
-  	t0 = SYSTIME(/SECONDS)
-    ; Loop over all but the last time step
-  	FOR t=0L,params.nt-1 DO BEGIN													
-      ; Loop over all detections at the current time step
-  		FOR j=0,(*results[t]).ndetect-1 DO BEGIN									
-  			pass += 1L
-        ; If the label of the current detection is bigger than the detection counter
-  			IF ((*(*results[t]).structs[j]).label GT detect_counter) THEN BEGIN					
-          ; Increase the detection counter by 1
-  				detect_counter += 1L										
-          ; Relabel the current detection with the updated detection counter
-  				(*(*results[t]).structs[j]).label = detect_counter						
-  			ENDIF
-  			orig_detection = (*(*results[t]).structs[j]).pos
-  
-  			overlapped = 0
-  			ncor = 0
-  			k_array = -1
-  			ncomarr = -1
-  			t_usel = t
-  			t_ubound = (t + params.t_skip_constraint) < (params.nt-1)
-  			WHILE ((overlapped EQ 0) AND (t_usel LT t_ubound)) DO BEGIN
-  				IF (t_usel LT t_ubound) THEN t_usel += 1
-          ; Loop over all detections at the next time step
-  				FOR k=0,(*results[t_usel]).ndetect-1 DO BEGIN								
-  					comp_detection = (*(*results[t_usel]).structs[k]).pos
-            ; Find the common elements between the considered detections
-            array_compare = EBDETECT_ARRAY_COMPARE(orig_detection, comp_detection)
-            ; If the number of common elements >= overlap constraint
-  					IF ((N_ELEMENTS(array_compare.common_array) GE params.overlap_constraint) AND $
-                (TOTAL(array_compare.common_array) NE -1)) THEN BEGIN		
-  						IF (TOTAL(k_array) NE -1) THEN $
-                k_array = [k_array,k] $
-              ELSE $
-                k_array = k 
-  						IF (TOTAL(ncomarr) NE -1) THEN $
-                ncomarr = [ncomarr,array_compare.ncommon_array] $
-              ELSE $
-                ncomarr = array_compare.ncommon_array 
-  						overlapped = 1
-  						ncor += 1
-  					ENDIF
-  				ENDFOR
-  			ENDWHILE
-  
-        ; If overlap occurs, assign the labels
-  			IF overlapped THEN BEGIN											
-          ; If there is only one that overlaps
-          IF (ncor EQ 1) THEN BEGIN
-  					oldlabel = (*(*results[t_usel]).structs[k_array[0]]).label 
-            ; Assign the current detection label to the next detection
-  					(*(*results[t_usel]).structs[k_array[0]]).label = $
-              (*(*results[t]).structs[j]).label 		
-            extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
-              STRTRIM((*(*results[t_usel]).structs[k_array[0]]).label,2)+','+$
-              STRTRIM(ncomarr[0],2)
-          ENDIF ELSE BEGIN
-            ; If there are multiple that overlap, determine which one has the
-            ; biggest overlap
-  					wheremaxoverlap = WHERE(ncomarr EQ MAX(ncomarr,/NAN),$
-              COMPLEMENT=wherenotmaxoverlap,NCOMPLEMENT=nwherenotmaxoverlap)
-  					oldlabel = (*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label 
-            ; Assign the next detection the current detection label
-  					(*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label = $
-              (*(*results[t]).structs[j]).label 		
-            extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
-              STRTRIM((*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label,2)+','+$
-              STRTRIM(ncomarr[0],2)
-  				ENDELSE
-  			ENDIF ELSE $
-          extraout = 'No overlap: '+STRTRIM((*(*results[t]).structs[j]).label,2)
-        ; Output timer and extra information
-        IF (verbose GE 1) THEN EBDETECT_TIMER, t+1, params.nt, t0, $
-          EXTRA=extraout, TOTAL_TIME=(verbose GE 2)
-  		ENDFOR
-  	ENDFOR
-    unique_labels = LINDGEN(detect_counter)+1
-    IF (verbose GE 2) THEN BEGIN
-      PRINT, ''
-      EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
-    	IF (verbose EQ 3) THEN STOP
-    ENDIF
-  
-  ;================================================================================
-  ;=========================== Check for merging events ===========================
-  ;================================================================================
-  	IF KEYWORD_SET(params.merge_check) THEN BEGIN
-      IF (verbose GE 1) THEN BEGIN
-        IF (verbose GE 2) THEN BEGIN
-          t_init = SYSTIME(/SECONDS)
-          feedback_txt = 'Performing merge check.'
-          EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
-        ENDIF ELSE $
-          PRINT,''
+    ; Only process further if at least one detection was made
+    IF (totnlabels NE 0) THEN BEGIN
+      IF (verbose GE 2) THEN BEGIN
+        t_init = SYSTIME(/SECONDS)
+        feedback_txt = 'Applying overlap check.'
+        EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
       ENDIF
-  		pass = 0L
-  		totpasses = 0L
-  		FOR t=0,params.nt-1 DO totpasses += LONG((*results[t]).ndetect)
-  		t0 = SYSTIME(/SECONDS)
+    	pass = 0L
+    ;	totpasses = 0L
+    	tt = 0
+    	first_detect = 0
+      detect_counter = -1
+      ; Necessary while loop as the first frame(s) might not contain any detection
+    	WHILE ((first_detect EQ 0) AND (tt LT params.nt)) DO BEGIN
+    		IF ((*results[tt]).ndetect GT 0) THEN BEGIN
+    			detect_counter = LONG((*(*results[tt]).structs[(*results[tt]).ndetect-1]).label)
+    			first_detect = 1
+    		ENDIF
+    		tt += 1
+    	ENDWHILE
+    ;	FOR t=0L,params.nt-2 DO totpasses += LONG((*results[t]).ndetect)
+    	t0 = SYSTIME(/SECONDS)
       ; Loop over all but the last time step
-  		FOR t_dum=0,params.nt-1 DO BEGIN													
-  			t = params.nt-t_dum-1
+    	FOR t=0L,params.nt-1 DO BEGIN													
         ; Loop over all detections at the current time step
-  			FOR j=0,(*results[t]).ndetect-1 DO BEGIN									
-  				pass += 1L
-  				orig_detection = (*(*results[t]).structs[j]).pos
-  				overlapped = 0
-  				ncor = 0
-  				k_array = -1
-  				ncomarr = -1
-  				t_lsel = t
-  				t_lbound = (t - params.t_skip_constraint) > 0
-          ; Check labels and overlap
-  				WHILE ((overlapped EQ 0) AND (t_lsel GT t_lbound)) DO BEGIN						
-  					IF (t_lsel GT t_lbound) THEN t_lsel -= 1
-  					FOR k=0,(*results[t_lsel]).ndetect-1 DO BEGIN								
-              ; Loop over all detections at the next time step
-  						comp_detection = (*(*results[t_lsel]).structs[k]).pos
+    		FOR j=0,(*results[t]).ndetect-1 DO BEGIN									
+    			pass += 1L
+          ; If the label of the current detection is bigger than the detection counter
+    			IF ((*(*results[t]).structs[j]).label GT detect_counter) THEN BEGIN					
+            ; Increase the detection counter by 1
+    				detect_counter += 1L										
+            ; Relabel the current detection with the updated detection counter
+    				(*(*results[t]).structs[j]).label = detect_counter						
+    			ENDIF
+    			orig_detection = (*(*results[t]).structs[j]).pos
+    
+    			overlapped = 0
+    			ncor = 0
+    			k_array = -1
+    			ncomarr = -1
+    			t_usel = t
+    			t_ubound = (t + params.t_skip_constraint) < (params.nt-1)
+    			WHILE ((overlapped EQ 0) AND (t_usel LT t_ubound)) DO BEGIN
+    				IF (t_usel LT t_ubound) THEN t_usel += 1
+            ; Loop over all detections at the next time step
+    				FOR k=0,(*results[t_usel]).ndetect-1 DO BEGIN								
+    					comp_detection = (*(*results[t_usel]).structs[k]).pos
               ; Find the common elements between the considered detections
-              array_compare = EBDETECT_ARRAY_COMPARE(orig_detection, $
-                comp_detection)
+              array_compare = EBDETECT_ARRAY_COMPARE(orig_detection, comp_detection)
               ; If the number of common elements >= overlap constraint
-  						IF ((N_ELEMENTS(array_compare.common_array) GE $
-                  params.overlap_constraint) AND $
+    					IF ((N_ELEMENTS(array_compare.common_array) GE params.overlap_constraint) AND $
                   (TOTAL(array_compare.common_array) NE -1)) THEN BEGIN		
-  						  IF (TOTAL(k_array) NE -1) THEN $
+    						IF (TOTAL(k_array) NE -1) THEN $
                   k_array = [k_array,k] $
                 ELSE $
                   k_array = k 
-  						  IF (TOTAL(ncomarr) NE -1) THEN $
+    						IF (TOTAL(ncomarr) NE -1) THEN $
                   ncomarr = [ncomarr,array_compare.ncommon_array] $
                 ELSE $
                   ncomarr = array_compare.ncommon_array 
-  							overlapped = 1
-  							ncor += 1
-  						ENDIF
-  					ENDFOR
-  				ENDWHILE			
-          
-          ; If overlap occured, assign labels
-  				IF overlapped THEN BEGIN										
-  					IF (ncor GT 1) THEN BEGIN
-  						wheremaxoverlap = WHERE(ncomarr EQ MAX(ncomarr,/NAN))
-  						oldlabel = (*(*results[t]).structs[j]).label
-  						newlabel = (*(*results[t_lsel]).structs[k_array[wheremaxoverlap[0]]]).label 
+    						overlapped = 1
+    						ncor += 1
+    					ENDIF
+    				ENDFOR
+    			ENDWHILE
+    
+          ; If overlap occurs, assign the labels
+    			IF overlapped THEN BEGIN											
+            ; If there is only one that overlaps
+            IF (ncor EQ 1) THEN BEGIN
+    					oldlabel = (*(*results[t_usel]).structs[k_array[0]]).label 
+              ; Assign the current detection label to the next detection
+    					(*(*results[t_usel]).structs[k_array[0]]).label = $
+                (*(*results[t]).structs[j]).label 		
               extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
-                STRTRIM(newlabel,2)+','+STRTRIM(ncomarr[wheremaxoverlap[0]],2)
-              ;Assign the previous detection label to the current detection
-  						(*(*results[t]).structs[j]).label = newlabel						
-              ; Retroactively do this for all detections with that label
-  						FOR tt = t+1,nt-1 DO BEGIN
-  							kk = 0
-  							newlabel_set = 0
-  							WHILE ((newlabel_set EQ 0) AND (kk LE (*results[tt]).ndetect-1)) DO BEGIN
-  								IF ((*(*results[tt]).structs[kk]).label EQ oldlabel) THEN BEGIN
-  									(*(*results[tt]).structs[kk]).label = newlabel
-  									newlabel_set = 1
-  								ENDIF
-  								kk += 1	
-  							ENDWHILE
-  						ENDFOR
-              IF (newlabel NE oldlabel) THEN $
-                unique_labels = unique_labels[WHERE(unique_labels NE oldlabel)]
-  					ENDIF
-  				ENDIF
-          IF (verbose GE 1) THEN EBDETECT_TIMER,t_dum+1,nt,t0,EXTRA=extraout, $
-            TOTAL_TIME=(verbose GE 2)
-  			ENDFOR
-  		ENDFOR
-  	ENDIF
-    ndetections = N_ELEMENTS(unique_labels)
-  
-  ;================================================================================
-  ;=========================== Override merging events ============================
-  ;================================================================================
-  	IF (N_ELEMENTS(params.override_merge) EQ 4) THEN BEGIN
-      IF (TOTAL(params.override_merge) NE -4) THEN BEGIN
-    		IF (verbose GE 2) THEN $
-          EBDETECT_FEEDBACK, /STATUS, 'Overriding merge detection:'
-    		FOR t=params.override_merge[0],params.override_merge[1] DO BEGIN
-    			FOR k=0,(*results[t]).ndetect-1 DO BEGIN
-    				oldlabel = (*(*results[t]).structs[k]).label 
-    				IF (oldlabel EQ params.override_merge[2]) THEN BEGIN
-    					(*(*results[t]).structs[k]).label = params.override_merge[3]
-              unique_labels[WHERE(unique_labels EQ oldlabel)] = $
-                params.override_merge[3]
-              IF (verbose GE 2) THEN $
-                EBDETECT_FEEDBACK, '(t,detection,oldlabel,newlabel) => ('+$
-    					    STRTRIM(t,2)+','+STRTRIM(k,2)+','+STRTRIM(oldlabel,2)+$
-                  STRTRIM(params.override_merge[3],2)+')'
-    				ENDIF ELSE $
-              EBDETECT_FEEDBACK, 'No detection labelled '+STRTRIM(oldlabel,2)+$
-              ' found at '+STRTRIM(t,2)
+                STRTRIM((*(*results[t_usel]).structs[k_array[0]]).label,2)+','+$
+                STRTRIM(ncomarr[0],2)
+            ENDIF ELSE BEGIN
+              ; If there are multiple that overlap, determine which one has the
+              ; biggest overlap
+    					wheremaxoverlap = WHERE(ncomarr EQ MAX(ncomarr,/NAN),$
+                COMPLEMENT=wherenotmaxoverlap,NCOMPLEMENT=nwherenotmaxoverlap)
+    					oldlabel = (*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label 
+              ; Assign the next detection the current detection label
+    					(*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label = $
+                (*(*results[t]).structs[j]).label 		
+              extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
+                STRTRIM((*(*results[t_usel]).structs[k_array[wheremaxoverlap[0]]]).label,2)+','+$
+                STRTRIM(ncomarr[0],2)
+    				ENDELSE
+    			ENDIF ELSE $
+            extraout = 'No overlap: '+STRTRIM((*(*results[t]).structs[j]).label,2)
+          ; Output timer and extra information
+          IF (verbose GE 1) THEN EBDETECT_TIMER, t+1, params.nt, t0, $
+            EXTRA=extraout, TOTAL_TIME=(verbose GE 2)
+    		ENDFOR
+    	ENDFOR
+      unique_labels = LINDGEN(detect_counter)+1
+      IF (verbose GE 2) THEN BEGIN
+        PRINT, ''
+        EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
+      	IF (verbose EQ 3) THEN STOP
+      ENDIF
+    
+    ;================================================================================
+    ;=========================== Check for merging events ===========================
+    ;================================================================================
+    	IF KEYWORD_SET(params.merge_check) THEN BEGIN
+        IF (verbose GE 1) THEN BEGIN
+          IF (verbose GE 2) THEN BEGIN
+            t_init = SYSTIME(/SECONDS)
+            feedback_txt = 'Performing merge check.'
+            EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
+          ENDIF ELSE $
+            PRINT,''
+        ENDIF
+    		pass = 0L
+    		totpasses = 0L
+    		FOR t=0,params.nt-1 DO totpasses += LONG((*results[t]).ndetect)
+    		t0 = SYSTIME(/SECONDS)
+        ; Loop over all but the last time step
+    		FOR t_dum=0,params.nt-1 DO BEGIN													
+    			t = params.nt-t_dum-1
+          ; Loop over all detections at the current time step
+    			FOR j=0,(*results[t]).ndetect-1 DO BEGIN									
+    				pass += 1L
+    				orig_detection = (*(*results[t]).structs[j]).pos
+    				overlapped = 0
+    				ncor = 0
+    				k_array = -1
+    				ncomarr = -1
+    				t_lsel = t
+    				t_lbound = (t - params.t_skip_constraint) > 0
+            ; Check labels and overlap
+    				WHILE ((overlapped EQ 0) AND (t_lsel GT t_lbound)) DO BEGIN						
+    					IF (t_lsel GT t_lbound) THEN t_lsel -= 1
+    					FOR k=0,(*results[t_lsel]).ndetect-1 DO BEGIN								
+                ; Loop over all detections at the next time step
+    						comp_detection = (*(*results[t_lsel]).structs[k]).pos
+                ; Find the common elements between the considered detections
+                array_compare = EBDETECT_ARRAY_COMPARE(orig_detection, $
+                  comp_detection)
+                ; If the number of common elements >= overlap constraint
+    						IF ((N_ELEMENTS(array_compare.common_array) GE $
+                    params.overlap_constraint) AND $
+                    (TOTAL(array_compare.common_array) NE -1)) THEN BEGIN		
+    						  IF (TOTAL(k_array) NE -1) THEN $
+                    k_array = [k_array,k] $
+                  ELSE $
+                    k_array = k 
+    						  IF (TOTAL(ncomarr) NE -1) THEN $
+                    ncomarr = [ncomarr,array_compare.ncommon_array] $
+                  ELSE $
+                    ncomarr = array_compare.ncommon_array 
+    							overlapped = 1
+    							ncor += 1
+    						ENDIF
+    					ENDFOR
+    				ENDWHILE			
+            
+            ; If overlap occured, assign labels
+    				IF overlapped THEN BEGIN										
+    					IF (ncor GT 1) THEN BEGIN
+    						wheremaxoverlap = WHERE(ncomarr EQ MAX(ncomarr,/NAN))
+    						oldlabel = (*(*results[t]).structs[j]).label
+    						newlabel = (*(*results[t_lsel]).structs[k_array[wheremaxoverlap[0]]]).label 
+                extraout = 'Overlap: '+STRTRIM(oldlabel,2)+' > '+$
+                  STRTRIM(newlabel,2)+','+STRTRIM(ncomarr[wheremaxoverlap[0]],2)
+                ;Assign the previous detection label to the current detection
+    						(*(*results[t]).structs[j]).label = newlabel						
+                ; Retroactively do this for all detections with that label
+    						FOR tt = t+1,nt-1 DO BEGIN
+    							kk = 0
+    							newlabel_set = 0
+    							WHILE ((newlabel_set EQ 0) AND (kk LE (*results[tt]).ndetect-1)) DO BEGIN
+    								IF ((*(*results[tt]).structs[kk]).label EQ oldlabel) THEN BEGIN
+    									(*(*results[tt]).structs[kk]).label = newlabel
+    									newlabel_set = 1
+    								ENDIF
+    								kk += 1	
+    							ENDWHILE
+    						ENDFOR
+                IF (newlabel NE oldlabel) THEN $
+                  unique_labels = unique_labels[WHERE(unique_labels NE oldlabel)]
+    					ENDIF
+    				ENDIF
+            IF (verbose GE 1) THEN EBDETECT_TIMER,t_dum+1,nt,t0,EXTRA=extraout, $
+              TOTAL_TIME=(verbose GE 2)
     			ENDFOR
     		ENDFOR
+    	ENDIF
+      ndetections = N_ELEMENTS(unique_labels)
+    
+    ;================================================================================
+    ;=========================== Override merging events ============================
+    ;================================================================================
+    	IF (N_ELEMENTS(params.override_merge) EQ 4) THEN BEGIN
+        IF (TOTAL(params.override_merge) NE -4) THEN BEGIN
+      		IF (verbose GE 2) THEN $
+            EBDETECT_FEEDBACK, /STATUS, 'Overriding merge detection:'
+      		FOR t=params.override_merge[0],params.override_merge[1] DO BEGIN
+      			FOR k=0,(*results[t]).ndetect-1 DO BEGIN
+      				oldlabel = (*(*results[t]).structs[k]).label 
+      				IF (oldlabel EQ params.override_merge[2]) THEN BEGIN
+      					(*(*results[t]).structs[k]).label = params.override_merge[3]
+                unique_labels[WHERE(unique_labels EQ oldlabel)] = $
+                  params.override_merge[3]
+                IF (verbose GE 2) THEN $
+                  EBDETECT_FEEDBACK, '(t,detection,oldlabel,newlabel) => ('+$
+      					    STRTRIM(t,2)+','+STRTRIM(k,2)+','+STRTRIM(oldlabel,2)+$
+                    STRTRIM(params.override_merge[3],2)+')'
+      				ENDIF ELSE $
+                EBDETECT_FEEDBACK, 'No detection labelled '+STRTRIM(oldlabel,2)+$
+                ' found at '+STRTRIM(t,2)
+      			ENDFOR
+      		ENDFOR
+        ENDIF
+    	ENDIF
+    
+      IF (verbose GE 2) THEN BEGIN
+        EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
+        EBDETECT_FEEDBACK, /STATUS, $
+          'Final number of single detections: '+STRTRIM(ndetections,2)
+    	  IF (verbose EQ 3) THEN STOP
       ENDIF
-  	ENDIF
-  
-    IF (verbose GE 2) THEN BEGIN
-      EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
-      EBDETECT_FEEDBACK, /STATUS, $
-        'Final number of single detections: '+STRTRIM(ndetections,2)
-  	  IF (verbose EQ 3) THEN STOP
-    ENDIF
-  
-  
-  ;================================================================================
-  ;=========================== Display and write results ==========================
-  ;================================================================================
-  	IF ((verbose GE 2) OR KEYWORD_SET(params.write_detect_overlap)) THEN BEGIN
-      ; Prep before looping over time
-  		IF (verbose GE 2) THEN BEGIN
-        t_init = SYSTIME(/SECONDS)
-        feedback_txt = 'Writing interim detection results.'
-        EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
-  			IF ~KEYWORD_SET(NO_PLOT) THEN $
-          WINDOW,XSIZE=750*dataratio,YSIZE=750, $
-          TITLE='EBDETECT: Continuity constraints'
-  		ENDIF
-      ; Define cube to be saved if not writing in place
-  		IF (KEYWORD_SET(params.write_detect_overlap) AND $
-          KEYWORD_SET(params.write_mask)) THEN BEGIN
-        IF ~KEYWORD_SET(params.write_inplace) THEN $
-          overlap_mask_cube = BYTARR(params.nx,params.ny,params.nt)
-      ENDIF
-      ; Loop over time and display results and/or write results to disk
-  		FOR t=0,params.nt-1 DO BEGIN
-  			mask = BYTARR(params.nx,params.ny)
-  			FOR j=0,(*results[t]).ndetect-1 DO $
-          mask[(*(*results[t]).structs[j]).pos] = 1B
-  			IF ((verbose GE 2) AND ~KEYWORD_SET(NO_PLOT)) THEN BEGIN
-  				TV,CONGRID(BYTSCL(LP_GET(full_wsum_cube_filename,t*nwsums),/NAN),750*dataratio,750)
-  				LOADCT,13,/SILENT
-  				CONTOUR,CONGRID(mask,750*dataratio,750),COLOR=255, LEVELS = 1, /ISOTROPIC, $
-            XS=13,YS=13,POSITION=[0,0,1,1],/NORMAL,/NOERASE
-          IF comparison_mask_exists THEN $
-            CONTOUR,REFORM(LP_GET(params.inputdir+params.comparison_mask,t)), $
-              COLOR=200, LEVELS=1, /ISO, XS=13, YS=13, $
-                    POS=[0,0,1,1], /NORMAL, /NOERASE
-  				LOADCT,0,/SILENT
-  				FOR j=0,(*results[t]).ndetect-1 DO BEGIN
-  					xyout_pos = ARRAY_INDICES(mask,((*(*results[t]).structs[j]).pos)[0])+[-5,-20]
-  					XYOUTS,xyout_pos[0]/FLOAT(nx),xyout_pos[1]/FLOAT(ny),$
-              STRTRIM((*(*results[t]).structs[j]).label,2), $
-              COLOR=255, /NORMAL, CHARSIZE=2
-  				ENDFOR
-  				XYOUTS,10.,10.,'All detections at t='+STRTRIM(t,2),/DATA,COLOR=255,CHARSIZE=2
-  				WAIT,0.05
-  			ENDIF
-  			IF (KEYWORD_SET(params.write_detect_overlap) AND $
+    
+    
+    ;================================================================================
+    ;=========================== Display and write results ==========================
+    ;================================================================================
+    	IF ((verbose GE 2) OR KEYWORD_SET(params.write_detect_overlap)) THEN BEGIN
+        ; Prep before looping over time
+    		IF (verbose GE 2) THEN BEGIN
+          t_init = SYSTIME(/SECONDS)
+          feedback_txt = 'Writing interim detection results.'
+          EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
+    			IF ~KEYWORD_SET(NO_PLOT) THEN $
+            WINDOW,XSIZE=750*dataratio,YSIZE=750, $
+            TITLE='EBDETECT: Continuity constraints'
+    		ENDIF
+        ; Define cube to be saved if not writing in place
+    		IF (KEYWORD_SET(params.write_detect_overlap) AND $
             KEYWORD_SET(params.write_mask)) THEN BEGIN
-          IF KEYWORD_SET(params.write_inplace) THEN $
-            LP_PUT, mask, params.outputdir+overlap_mask_filename, t, nt=params.nt, $
-              KEEP_OPEN=(t NE params.nt-1) $
-          ELSE $
-            overlap_mask_cube[*,*,t] = mask
+          IF ~KEYWORD_SET(params.write_inplace) THEN $
+            overlap_mask_cube = BYTARR(params.nx,params.ny,params.nt)
         ENDIF
-  		ENDFOR
-      ; Save results
-  		IF KEYWORD_SET(params.write_detect_overlap) THEN BEGIN
-        ; Write detection save file
-  			SAVE, results, ndetections, params, FILENAME=params.outputdir+detect_overlap_idlsave
-  			EBDETECT_FEEDBACK,'> Written: '+params.outputdir+detect_overlap_idlsave, /STATUS
-        ; Write cube if needed
-        IF (KEYWORD_SET(params.write_mask) AND $
-            ~KEYWORD_SET(params.write_inplace)) THEN BEGIN
-    			LP_WRITE, overlap_mask_cube, params.outputdir+overlap_mask_filename
-          EBDETECT_FEEDBACK, /STATUS, $
-            '> Written: '+params.outputdir+overlap_mask_filename
-        ENDIF
-  		ENDIF
-  	ENDIF
-    IF (verbose GE 2) THEN BEGIN
-      EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
-    	IF (verbose EQ 3) THEN STOP
-    ENDIF
-  
+        ; Loop over time and display results and/or write results to disk
+    		FOR t=0,params.nt-1 DO BEGIN
+    			mask = BYTARR(params.nx,params.ny)
+    			FOR j=0,(*results[t]).ndetect-1 DO $
+            mask[(*(*results[t]).structs[j]).pos] = 1B
+    			IF ((verbose GE 2) AND ~KEYWORD_SET(NO_PLOT)) THEN BEGIN
+    				TV,CONGRID(BYTSCL(LP_GET(full_wsum_cube_filename,t*nwsums),/NAN),750*dataratio,750)
+    				LOADCT,13,/SILENT
+    				CONTOUR,CONGRID(mask,750*dataratio,750),COLOR=255, LEVELS = 1, /ISOTROPIC, $
+              XS=13,YS=13,POSITION=[0,0,1,1],/NORMAL,/NOERASE
+            IF comparison_mask_exists THEN $
+              CONTOUR,REFORM(LP_GET(params.inputdir+params.comparison_mask,t)), $
+                COLOR=200, LEVELS=1, /ISO, XS=13, YS=13, $
+                      POS=[0,0,1,1], /NORMAL, /NOERASE
+    				LOADCT,0,/SILENT
+    				FOR j=0,(*results[t]).ndetect-1 DO BEGIN
+    					xyout_pos = ARRAY_INDICES(mask,((*(*results[t]).structs[j]).pos)[0])+[-5,-20]
+    					XYOUTS,xyout_pos[0]/FLOAT(nx),xyout_pos[1]/FLOAT(ny),$
+                STRTRIM((*(*results[t]).structs[j]).label,2), $
+                COLOR=255, /NORMAL, CHARSIZE=2
+    				ENDFOR
+    				XYOUTS,10.,10.,'All detections at t='+STRTRIM(t,2),/DATA,COLOR=255,CHARSIZE=2
+    				WAIT,0.05
+    			ENDIF
+    			IF (KEYWORD_SET(params.write_detect_overlap) AND $
+              KEYWORD_SET(params.write_mask)) THEN BEGIN
+            IF KEYWORD_SET(params.write_inplace) THEN $
+              LP_PUT, mask, params.outputdir+overlap_mask_filename, t, nt=params.nt, $
+                KEEP_OPEN=(t NE params.nt-1) $
+            ELSE $
+              overlap_mask_cube[*,*,t] = mask
+          ENDIF
+    		ENDFOR
+        ; Save results
+    		IF KEYWORD_SET(params.write_detect_overlap) THEN BEGIN
+          ; Write detection save file
+    			SAVE, results, ndetections, params, FILENAME=params.outputdir+detect_overlap_idlsave
+    			EBDETECT_FEEDBACK,'> Written: '+params.outputdir+detect_overlap_idlsave, /STATUS
+          ; Write cube if needed
+          IF (KEYWORD_SET(params.write_mask) AND $
+              ~KEYWORD_SET(params.write_inplace)) THEN BEGIN
+      			LP_WRITE, overlap_mask_cube, params.outputdir+overlap_mask_filename
+            EBDETECT_FEEDBACK, /STATUS, $
+              '> Written: '+params.outputdir+overlap_mask_filename
+          ENDIF
+    		ENDIF
+    	ENDIF
+      IF (verbose GE 2) THEN BEGIN
+        EBDETECT_FEEDBACK, feedback_txt, /STATUS, /DONE, T_INIT=t_init
+      	IF (verbose EQ 3) THEN STOP
+      ENDIF
+    ENDIF ; End of skip if totnlables = 0
+  ENDIF ELSE BEGIN 
+    ; Enter only if read_detect_overlap_enable=1
+    RESTORE, params.outputdir+detect_overlap_idlsave
+  	totnlabels = ndetections
+    EBDETECT_FEEDBACK, '> Restored detections from file: '+$
+      params.outputdir+detect_overlap_idlsave
+  ENDELSE
+
+  IF (totnlabels NE 0) THEN BEGIN
   ;================================================================================
   ;============== Group detections and apply lifetime constraints =================
   ;================================================================================
@@ -1583,7 +1600,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         STOP
       ENDIF
     ENDIF
-  ENDIF ELSE BEGIN
+  ENDIF ELSE BEGIN  ; End of skip if totnlabels = 0
     ; No initial detections made, so skip to here to create empty results
     sel_detections = totnlabels
     nsel_detections = totnlabels

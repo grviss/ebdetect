@@ -69,7 +69,8 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
     ; Switches
     sum_cube:0B, factor_sigma:0B, get_kernels:0B, $
     lc_constraint:0B, merge_check:1B, split_check:1B, $
-    read_detect_init:0B, write_detect_init:1B, write_detect_overlap:1B,$
+    read_detect_init:0B, write_detect_init:1B, $
+    read_detect_overlap:0B, write_detect_overlap:1B,$
     write_detect_final:1B, write_mask:1B, write_inplace:1B, $
     exit_status:0B }
   tag_names_orig = TAG_NAMES(result)
