@@ -1019,7 +1019,8 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         ; Save results
     		IF KEYWORD_SET(params.write_detect_overlap) THEN BEGIN
           ; Write detection save file
-    			SAVE, results, ndetections, params, FILENAME=params.outputdir+detect_overlap_idlsave
+    			SAVE, results, ndetections, unique_labels, params, $
+            FILENAME=params.outputdir+detect_overlap_idlsave
     			EBDETECT_FEEDBACK,'> Written: '+params.outputdir+detect_overlap_idlsave, /STATUS
           ; Write cube if needed
           IF (KEYWORD_SET(params.write_mask) AND $
