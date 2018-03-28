@@ -919,8 +919,6 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     								kk += 1	
     							ENDWHILE
     						ENDFOR
-                IF (newlabel NE oldlabel) THEN $
-                  unique_labels = unique_labels[WHERE(unique_labels NE oldlabel)]
     					ENDIF
     				ENDIF
             IF (verbose GE 1) THEN EBDETECT_TIMER,t_dum+1,nt,t0,EXTRA=extraout, $
@@ -928,6 +926,14 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     			ENDFOR
     		ENDFOR
     	ENDIF
+      ; Re-determine unique labels
+      labels = [ ]
+      FOR t=0,nt-1 DO BEGIN 
+        FOR k=0,(*results[t]).ndetect-1 DO $
+          labels = EBDETECT_ARRAY_APPEND(labels,$
+          (*(*results[t]).structs[k]).label)
+      ENDFOR
+      unique_labels = labels[UNIQ(labels, SORT(labels))]
       ndetections = N_ELEMENTS(unique_labels)
     
     ;================================================================================
@@ -1112,8 +1118,13 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   		lifetime = t_arr[nt_arr-1] - t_arr[0] + 1									; Determine lifetime
       IF (lifetime GT lifetime_max) THEN lifetime_max = lifetime
   		; Checking lifetime constraint
-      ; If the detections lifetime >= lifetime constraint
-  		IF ((lifetime GE min_lifetime) AND (lifetime LE max_lifetime)) THEN BEGIN		
+      ; If the detections lifetime >= lifetime constraint AND shortest contiguous
+      ; visiblity is at least >= lifetime constraint
+      tdiffs_str = STRJOIN(STRTRIM(ABS(t_arr - SHIFT(t_arr,-1)),2))
+      pass_cont_vis = STRMATCH(tdiffs_str, $
+        '*'+STRJOIN(REPLICATE('1',min_lifetime-1))+'*')
+  		IF ((lifetime GE min_lifetime) AND (lifetime LE max_lifetime) AND $
+          pass_cont_vis) THEN BEGIN		
         ; Add the detection label to the array of selected detections
         sel_detect_idx = EBDETECT_ARRAY_APPEND(sel_detect_idx, d)
         extra = 'Selected:    '
@@ -1155,7 +1166,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         'Detection indices: ['+STRJOIN(STRTRIM(sel_detect_idx,2),',')+']'
   	  IF (verbose EQ 3) THEN STOP
     ENDIF
-  	
+  
   ;================================================================================
   ;===================== Construct final detection output =========================
   ;================================================================================
