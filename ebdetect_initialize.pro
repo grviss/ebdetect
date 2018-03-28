@@ -67,7 +67,7 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
     region_threshold:[0L,0L,0L,0L], remove_detections:-1, $
     override_merge:[-1,-1,-1,-1], $
     ; Switches
-    sum_cube:0B, factor_sigma:0B, get_kernels:0B, $
+    sum_cube:0B, factor_sigma:0B, get_kernels:0B, get_centroids:1B, $
     lc_constraint:0B, merge_check:1B, split_check:1B, $
     read_detect_init:0B, write_detect_init:1B, $
     read_detect_overlap:0B, write_detect_overlap:1B,$

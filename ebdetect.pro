@@ -1224,12 +1224,14 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   	  		mask = BYTARR(nx,ny)
   	  		mask[(*(*sel_detections[detpass]).det[tt]).pos] = 1B
           ; Get centroids
-          centroid = EBDETECT_GET_CENTROID(*(*sel_detections[detpass]).det[tt], $
-            mask, /FLUX)
-          xy[*,tt] = centroid.xy_geom
-          xy_flux[*,tt] = centroid.xy_flux
-          (*(*sel_detections[detpass]).det[tt]).xy = REFORM(xy[*,tt])
-          (*(*sel_detections[detpass]).det[tt]).xy_flux = REFORM(xy_flux[*,tt])
+          IF KEYWORD_SET(params.get_centroids) THEN BEGIN
+            centroid = EBDETECT_GET_CENTROID(*(*sel_detections[detpass]).det[tt], $
+              mask, /FLUX)
+            xy[*,tt] = centroid.xy_geom
+            xy_flux[*,tt] = centroid.xy_flux
+            (*(*sel_detections[detpass]).det[tt]).xy = REFORM(xy[*,tt])
+            (*(*sel_detections[detpass]).det[tt]).xy_flux = REFORM(xy_flux[*,tt])
+          ENDIF
           ; Add local detection mask to overall detection mask
   	  		sel_detect_mask[*,*,t_real] += mask
           ; Check for kernel pixels within the detection
@@ -1293,12 +1295,14 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
                     'pos',kernelpositions, 'int', kernelintensities, $
                     'flux',kernelflux)
                   ; Get the centroids
-                  tmp_kernel_mask[kernelpositions] = 1B
-                  kernel_centroid = EBDETECT_GET_CENTROID(*kernels[j], $
-                    tmp_kernel_mask, /FLUX)
-                  *kernels[j] = CREATE_STRUCT(*kernels[j], $
-                    'xy', kernel_centroid.xy_geom, $
-                    'xy_flux', kernel_centroid.xy_flux)
+                  IF KEYWORD_SET(params.get_centroids) THEN BEGIN
+                    tmp_kernel_mask[kernelpositions] = 1B
+                    kernel_centroid = EBDETECT_GET_CENTROID(*kernels[j], $
+                      tmp_kernel_mask, /FLUX)
+                    *kernels[j] = CREATE_STRUCT(*kernels[j], $
+                      'xy', kernel_centroid.xy_geom, $
+                      'xy_flux', kernel_centroid.xy_flux)
+                  ENDIF
     						ENDFOR  ; j-loop
     					ENDELSE
     				ENDIF ELSE BEGIN
