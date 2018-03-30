@@ -1120,9 +1120,12 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   		; Checking lifetime constraint
       ; If the detections lifetime >= lifetime constraint AND shortest contiguous
       ; visiblity is at least >= lifetime constraint
-      tdiffs_str = STRJOIN(STRTRIM(ABS(t_arr - SHIFT(t_arr,-1)),2))
-      pass_cont_vis = STRMATCH(tdiffs_str, $
-        '*'+STRJOIN(REPLICATE('1',min_lifetime-1))+'*')
+      IF (nt_arr GE min_lifetime) THEN BEGIN
+        tdiffs_str = STRJOIN(STRTRIM(ABS(t_arr - SHIFT(t_arr,-1)),2))
+        pass_cont_vis = STRMATCH(tdiffs_str, $
+          '*'+STRJOIN(REPLICATE('1',min_lifetime-1))+'*')
+      ENDIF ELSE $
+        pass_cont_vis = 0
   		IF ((lifetime GE min_lifetime) AND (lifetime LE max_lifetime) AND $
           pass_cont_vis) THEN BEGIN		
         ; Add the detection label to the array of selected detections
