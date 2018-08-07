@@ -46,7 +46,7 @@
 ; EXAMPLE:
 ;
 ; MODIFICATION HISTORY:
-;   2016 Dec 01 Gregal Vissers: Taylored and simplified version from own
+;   2016 Dec 01 Gregal Vissers: Tailored and simplified version from own
 ;                               ARRAY_COMPARE procedure (with init 2011 Oct 04)
 ;-
 ;
@@ -55,15 +55,15 @@ FUNCTION EBDETECT_ARRAY_COMPARE, Array1, Array2, VERBOSE=verbose
 	IF (N_PARAMS() LT 2) THEN BEGIN
     MESSAGE, '$Id$', /INFO
 		MESSAGE, 'Syntax: result = EBDETECT_ARRAY_COMPARE(Array1, Array2 '+$
-      '[, /VERBOSE]', /INFO
+      '[, /VERBOSE])', /INFO
 		RETURN, -1
 	ENDIF
 
 	narray1 = N_ELEMENTS(array1)
 	narray2 = N_ELEMENTS(array2)
 	IF KEYWORD_SET(VERBOSE) THEN BEGIN
-		PRINT,'Array1 has '+STRTRIM(narray1,2)+' elements.'
-		PRINT,'Array2 has '+STRTRIM(narray2,2)+' elements.'
+		MESSAGE,'Array1 has '+STRTRIM(narray1,2)+' elements.', /INFO
+		MESSAGE,'Array2 has '+STRTRIM(narray2,2)+' elements.', /INFO
 	ENDIF
 
 	sorted_array1 = SORT(array1)

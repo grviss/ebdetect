@@ -43,7 +43,7 @@
 ;     0   1   2   3   4   5   6   7   8   9
 ;
 ; MODIFICATION HISTORY:
-;   2017 Dec 05 Gregal Vissers: Taylored and simplified version from own
+;   2017 Dec 05 Gregal Vissers: Tailored and simplified version from own
 ;                               ARRAY_APPEND procedure 
 ;-
 ;
@@ -52,7 +52,7 @@ FUNCTION EBDETECT_ARRAY_APPEND, Inputarray, Appendix, DIMS=dims
 	IF (N_PARAMS() LT 2) THEN BEGIN
     MESSAGE, '$Id$', /INFO
 		MESSAGE, 'Syntax: result = EBDETECT_ARRAY_APPEND(Inputarray, Appendix '+$
-      '[, DIMS=dims]', /INFO
+      '[, DIMS=dims])', /INFO
 		RETURN, -1
 	ENDIF
 
