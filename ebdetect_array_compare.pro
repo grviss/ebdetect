@@ -70,9 +70,9 @@ FUNCTION EBDETECT_ARRAY_COMPARE, Array1, Array2, VERBOSE=verbose
 	sorted_array2 = SORT(array2)
 	i = 0L
 	j = 0L
-	common_array = -1
-  index_array1 = -1
-  index_array2 = -1
+	common_array = !NULL
+  index_array1 = !NULL
+  index_array2 = !NULL
 	WHILE ((i LT narray1) AND (j LT narray2)) DO BEGIN
 		IF (array1[i] EQ array2[j]) THEN BEGIN
       common_array = EBDETECT_ARRAY_APPEND(common_array, array1[i])
