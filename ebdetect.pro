@@ -52,7 +52,8 @@
 ;   Requires the following procedures and functions:
 ;   Procedures: LP_HEADER, LP_WRITE, EBDETECT_MAKE_SUMCUBE, EBDETECT_TIMER,
 ;               EBDETECT_FEEDBACK
-;   Functions:  EBDETECT_INITIALIZE(), EBDETECT_ARRAY_COMPARE(), LP_GET()
+;   Functions:  EBDETECT_INITIALIZE(), EBDETECT_ARRAY_COMPARE(),
+;               EBDETECT_ARRAY_APPEND(), LP_GET()
 ;
 ; PROCEDURE:
 ;
@@ -775,8 +776,8 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     
     			overlapped = 0
     			ncor = 0
-    			k_array = -1
-    			ncomarr = -1
+    			k_array = [ ]
+    			ncomarr = [ ]
     			t_usel = t
     			t_ubound = (t + params.t_skip_constraint) < (params.nt-1)
     			WHILE ((overlapped EQ 0) AND (t_usel LT t_ubound)) DO BEGIN
@@ -787,16 +788,11 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
               ; Find the common elements between the considered detections
               array_compare = EBDETECT_ARRAY_COMPARE(orig_detection, comp_detection)
               ; If the number of common elements >= overlap constraint
-    					IF ((N_ELEMENTS(array_compare.common_array) GE params.overlap_constraint) AND $
-                  (TOTAL(array_compare.common_array) NE -1)) THEN BEGIN		
-    						IF (TOTAL(k_array) NE -1) THEN $
-                  k_array = [k_array,k] $
-                ELSE $
-                  k_array = k 
-    						IF (TOTAL(ncomarr) NE -1) THEN $
-                  ncomarr = [ncomarr,array_compare.ncommon_array] $
-                ELSE $
-                  ncomarr = array_compare.ncommon_array 
+    					IF ((array_compare.ncommon_array GE params.overlap_constraint) AND $
+                  (array_compare.common_array NE !NULL)) THEN BEGIN		
+                k_array = EBDETECT_ARRAY_APPEND(k_array, k)
+                ncomarr = EBDETECT_ARRAY_APPEND(ncomarr, $
+                  array_compare.ncommon_array)
     						overlapped = 1
     						ncor += 1
     					ENDIF
@@ -866,8 +862,8 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     				orig_detection = (*(*results[t]).structs[j]).pos
     				overlapped = 0
     				ncor = 0
-    				k_array = -1
-    				ncomarr = -1
+    				k_array = [ ]
+    				ncomarr = [ ]
     				t_lsel = t
     				t_lbound = (t - params.t_skip_constraint) > 0
             ; Check labels and overlap
@@ -880,17 +876,11 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
                 array_compare = EBDETECT_ARRAY_COMPARE(orig_detection, $
                   comp_detection)
                 ; If the number of common elements >= overlap constraint
-    						IF ((N_ELEMENTS(array_compare.common_array) GE $
-                    params.overlap_constraint) AND $
-                    (TOTAL(array_compare.common_array) NE -1)) THEN BEGIN		
-    						  IF (TOTAL(k_array) NE -1) THEN $
-                    k_array = [k_array,k] $
-                  ELSE $
-                    k_array = k 
-    						  IF (TOTAL(ncomarr) NE -1) THEN $
-                    ncomarr = [ncomarr,array_compare.ncommon_array] $
-                  ELSE $
-                    ncomarr = array_compare.ncommon_array 
+    					  IF ((array_compare.ncommon_array GE params.overlap_constraint) AND $
+                    (array_compare.common_array NE !NULL)) THEN BEGIN		
+                  k_array = EBDETECT_ARRAY_APPEND(k_array, k)
+                  ncomarr = EBDETECT_ARRAY_APPEND(ncomarr, $
+                    array_compare.ncommon_array)
     							overlapped = 1
     							ncor += 1
     						ENDIF
@@ -1370,9 +1360,8 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
                   array_compare = EBDETECT_ARRAY_COMPARE(orig_detection, $
                     comp_detection)
                   ; If the number of common elements >= overlap constraint
-        					IF ((N_ELEMENTS(array_compare.common_array) GE $
-                      params.overlap_constraint) AND $
-                      (TOTAL(array_compare.common_array) NE -1)) THEN BEGIN		
+    					    IF ((array_compare.ncommon_array GE params.overlap_constraint) AND $
+                      (array_compare.common_array NE !NULL)) THEN BEGIN		
                     k_array = EBDETECT_ARRAY_APPEND(k_array, k)
                     ncomarr = EBDETECT_ARRAY_APPEND(ncomarr, $
                       array_compare.ncommon_array)
@@ -1451,9 +1440,8 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
                     array_compare = EBDETECT_ARRAY_COMPARE(orig_detection, $
                       comp_detection)
                     ; If the number of common elements >= overlap constraint
-  						      IF ((N_ELEMENTS(array_compare.common_array) GE $
-                        params.overlap_constraint) AND $
-                        (TOTAL(array_compare.common_array) NE -1)) THEN BEGIN		
+    					      IF ((array_compare.ncommon_array GE params.overlap_constraint) AND $
+                        (array_compare.common_array NE !NULL)) THEN BEGIN		
                       k_array = EBDETECT_ARRAY_APPEND(k_array, k)
                       ncomarr = EBDETECT_ARRAY_APPEND(ncomarr, $
                         array_compare.ncommon_array)
