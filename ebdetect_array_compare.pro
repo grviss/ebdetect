@@ -73,6 +73,7 @@ FUNCTION EBDETECT_ARRAY_COMPARE, Array1, Array2, VERBOSE=verbose
 	common_array = !NULL
   index_array1 = !NULL
   index_array2 = !NULL
+  ncommon_array = 0
 	WHILE ((i LT narray1) AND (j LT narray2)) DO BEGIN
 		IF (array1[i] EQ array2[j]) THEN BEGIN
       common_array = EBDETECT_ARRAY_APPEND(common_array, array1[i])
@@ -85,8 +86,9 @@ FUNCTION EBDETECT_ARRAY_COMPARE, Array1, Array2, VERBOSE=verbose
     ELSE $
       j += 1L
 	ENDWHILE
-	
-  ncommon_array = N_ELEMENTS(COMMON_ARRAY)
+
+  IF (common_array NE !NULL) THEN $
+    ncommon_array = N_ELEMENTS(COMMON_ARRAY) 
 
   IF KEYWORD_SET(VERBOSE) THEN PRINT, common_array
   result = {common_array:common_array, ncommon_array:ncommon_array, $
