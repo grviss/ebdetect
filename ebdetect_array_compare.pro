@@ -87,12 +87,14 @@ FUNCTION EBDETECT_ARRAY_COMPARE, Array1, Array2, VERBOSE=verbose
       j += 1L
 	ENDWHILE
 
-  IF (common_array NE !NULL) THEN $
+  IF (common_array NE !NULL) THEN BEGIN
     ncommon_array = N_ELEMENTS(COMMON_ARRAY) 
+    result = {common_array:common_array, ncommon_array:ncommon_array, $
+              index_array1:index_array1, index_array2:index_array2}
+  ENDIF ELSE $
+    result = {ncommon_array:ncommon_array}
 
   IF KEYWORD_SET(VERBOSE) THEN PRINT, common_array
-  result = {common_array:common_array, ncommon_array:ncommon_array, $
-            index_array1:index_array1, index_array2:index_array2}
 	
   RETURN, result
 
