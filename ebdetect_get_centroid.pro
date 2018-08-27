@@ -89,7 +89,7 @@ FUNCTION EBDETECT_GET_CENTROID, SelDet, Mask, DIMS=dims, FLUX=flux
     cx_flux = TOTAL(xys[0,*] * SelDet.int) / FLOAT(TOTAL(SelDet.int))
     cy_flux = TOTAL(xys[1,*] * SelDet.int) / FLOAT(TOTAL(SelDet.int))
     xy_flux = [cx_flux, cy_flux]
-  ENDIF ELSE xy_flux = !NULL
+  ENDIF ELSE xy_flux = !VALUES.F_NAN
 
   ; Construct and return result x- and y-coordinates
   result = {xy_geom:xy_geom, xy_flux:xy_flux}
