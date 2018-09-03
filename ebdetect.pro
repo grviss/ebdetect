@@ -564,32 +564,44 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         WINDOW, XSIZE=750*dataratio, YSIZE=750, $
         TITLE='EBDETECT: Intensity thresholding'
     ENDIF
+    ; Get intensity threshold over time
+    IF intensity_constraint_set THEN BEGIN
+      FOR ll=0,nlevels-1 DO $
+        threshold = EBDETECT_ARRAY_APPEND(threshold, $
+          MAKE_ARRAY(params.nt, nwsums, DIM=3,$ 
+          VALUE=params.intensity_constraint[ll]))
+    ENDIF ELSE BEGIN
+      threshold = FLTARR(params.nt, nwsums, nlevels)
+      IF (KEYWORD_SET(calc_running_mean) OR KEYWORD_SET(read_running_mean)) THEN BEGIN
+        mean_summed_cube = running_mean_summed_cube
+        IF ~KEYWORD_SET(params.factor_sigma) THEN $
+          sdev = running_sdev
+      ENDIF ELSE BEGIN
+        mean_summed_cube = REPLICATE(1., params.nt) # mean_summed_cube
+        IF ~KEYWORD_SET(params.factor_sigma) THEN $
+          sdev = REPLICATE(1., params.nt) # sdev
+      ENDELSE
+      FOR t=0,params.nt-1 DO BEGIN
+        ; Allow for hysteresis constraints
+        IF KEYWORD_SET(params.factor_sigma) THEN $
+          threshold[t,*,*] = REFORM(mean_summed_cube[t,*])#params.sigma_constraint $
+        ELSE $
+          threshold[t,*,*] = REFORM(mean_summed_cube[t,*])#REPLICATE(1., nlevels) + $
+            REFORM(sdev[t,*])#params.sigma_constraint
+      ENDFOR
+    ENDELSE
 		t0 = SYSTIME(/SECONDS)
 		FOR t=0L,params.nt-1 DO BEGIN
 			mask = BYTARR(params.nx,params.ny)                           
 			wsum_mask = BYTARR(params.nx,params.ny)                           
-      ; Select the pixels where cube intensity > mean intensity + sigma * stdev
-      IF (KEYWORD_SET(calc_running_mean) OR KEYWORD_SET(read_running_mean)) THEN BEGIN
-        mean_summed_cube = running_mean_summed_cube[t,*]
-        IF ~KEYWORD_SET(params.factor_sigma) THEN $
-          sdev = running_sdev[t,*]
-      ENDIF
       select_summed_cube = FLTARR(params.nx, params.ny, nwsums)
       FOR ss=0,nwsums-1 DO $
   			select_summed_cube[0,0,ss] = LP_GET(full_wsum_cube_filename,t*nwsums+ss)
-      FOR s=0,nlevels-1 DO BEGIN                      
-        ; Allow for hysteresis constraints
-        IF intensity_constraint_set THEN $
-          threshold = params.intensity_constraint[s] $
-        ELSE BEGIN
-          IF KEYWORD_SET(params.factor_sigma) THEN  $
-            threshold = mean_summed_cube*params.sigma_constraint[s] $
-          ELSE $
-            threshold = mean_summed_cube+params.sigma_constraint[s]*sdev
-        ENDELSE
+      FOR ll=0,nlevels-1 DO BEGIN                      
+        ; Determine masks based on threshold(s)
         FOR ss=0,nwsums-1 DO BEGIN
-          select_summed_cube = LP_GET(full_wsum_cube_filename, t*nwsums+ss)
-          wsum_wheregt = WHERE(select_summed_cube GT threshold[ss], wsum_count)
+          wsum_wheregt = WHERE($
+            REFORM(select_summed_cube[*,*,ss]) GT threshold[t,ss,ll], wsum_count)
           IF (wsum_count NE 0) THEN wsum_mask[wsum_wheregt] += 1B
         ENDFOR
         ; Select based on either AND or OR
@@ -718,7 +730,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
    ; Write thresholding detections to file
 		IF KEYWORD_SET(params.write_detect_init) THEN BEGIN									
 			ndetections = totnlabels
-			SAVE, results, ndetections, params, FILENAME=params.outputdir+detect_init_idlsave
+			SAVE, results, ndetections, threshold, params, FILENAME=params.outputdir+detect_init_idlsave
 			EBDETECT_FEEDBACK,'Written: '+params.outputdir+detect_init_idlsave, /STATUS
 		ENDIF
 	  IF (verbose EQ 3) THEN STOP
@@ -1016,7 +1028,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     		IF KEYWORD_SET(params.write_detect_overlap) THEN BEGIN
           ; Write detection save file
     			SAVE, results, ndetections, unique_labels, params, $
-            detect_counter, FILENAME=params.outputdir+detect_overlap_idlsave
+            detect_counter, threshold, FILENAME=params.outputdir+detect_overlap_idlsave
     			EBDETECT_FEEDBACK,'> Written: '+params.outputdir+detect_overlap_idlsave, /STATUS
           ; Write cube if needed
           IF (KEYWORD_SET(params.write_mask) AND $
@@ -1633,7 +1645,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
     ENDIF
     ; Write IDL save file
-		SAVE,sel_detections,nsel_detections,params,filename=params.outputdir+detect_final_idlsave
+		SAVE,sel_detections,nsel_detections,params,threshold,filename=params.outputdir+detect_final_idlsave
 		EBDETECT_FEEDBACK, '> Written: '+params.outputdir+detect_final_idlsave
     IF KEYWORD_SET(params.write_mask) THEN BEGIN
   		LP_WRITE,sel_detect_mask, params.outputdir+final_mask_filename
