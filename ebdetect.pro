@@ -399,7 +399,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         IF ~KEYWORD_SET(params.factor_sigma) THEN $
           running_sdev = FLTARR(params.nt,nwsums) $
         ELSE $
-          running_sdev = !NULL
+          running_sdev = -1
         tlow = (INDGEN(params.nt)-ROUND(params.running_mean/2.)) > 0 < $
                (params.nt - 1 - params.running_mean)
         tupp = (tlow + params.running_mean) < (params.nt-1)
@@ -687,11 +687,15 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
             ; Loop over all labels
 						FOR j=0,nlabels-1 DO BEGIN								
               ; Select the pixels corresponding to current label
-							positions = WHERE(labels EQ label_vals[j])					
+							positions = WHERE(labels EQ label_vals[j], npix)					
               positions2d = ARRAY_INDICES(labels, positions)
               ; Get the corresponding intensities and flux
-              intensities = select_summed_cube[positions2d[0],positions2d[1],*]
-              flux = TOTAL(ABS(intensities) * pixarea)
+              intensities = [ ]
+              FOR pp=0,npix-1 DO $
+                intensities = EBDETECT_ARRAY_APPEND(intensities, REFORM($
+                  select_summed_cube[positions2d[0,pp],positions2d[1,pp],*]), $
+                  DIMS=2)
+              flux = TOTAL(ABS(intensities) * pixarea, 1+(nwsums GT 1))
               ; Write results to pointer
 							*structs[j] = CREATE_STRUCT('label',label_vals[j]+totnlabels,$
                 'pos',positions, 'int', intensities, 'flux', flux)	
@@ -1289,7 +1293,8 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     						FOR j=0,nkernellabels-1 DO BEGIN								
                   tmp_kernel_mask = BYTARR(params.nx,params.ny)
                   ; Select the pixels corresponding to current label
-    							kernelpositions = WHERE(kernellabels EQ kernellabel_vals[j])					
+    							kernelpositions = WHERE(kernellabels EQ kernellabel_vals[j], $
+                    npix)					
     							kernelpositions2d = ARRAY_INDICES(kernellabels, kernelpositions)
                   ; Get the corresponding intensities and flux
                   kernelintensities = select_summed_cube[kernelpositions2d[0], $

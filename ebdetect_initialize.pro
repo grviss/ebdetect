@@ -59,7 +59,7 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
     inputdir:'./', outputdir:'./', $
     ; Detection parameters
     nlp:1L, nx:1L, ny:1L, nt:1L, wsum_pos:0L, lcsum_pos:0L, $
-    asecpix:[1L,1L], intensity_constraint:!VALUES.F_NAN, $
+    asecpix:[1.,1.], intensity_constraint:!VALUES.F_NAN, $
     sigma_constraint:0., lc_sigma:0., lifetime_constraint:[0L,1L], $
     size_constraint:[1L,1L], overlap_constraint:1L, t_skip_constraint:0L, $
     limit_group_search:0L, $
