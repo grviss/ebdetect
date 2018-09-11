@@ -66,8 +66,6 @@ FUNCTION EBDETECT_ARRAY_COMPARE, Array1, Array2, VERBOSE=verbose
 		MESSAGE,'Array2 has '+STRTRIM(narray2,2)+' elements.', /INFO
 	ENDIF
 
-	sorted_array1 = SORT(array1)
-	sorted_array2 = SORT(array2)
 	i = 0L
 	j = 0L
 	common_array = !NULL
