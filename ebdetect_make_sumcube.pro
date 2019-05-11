@@ -3,7 +3,7 @@
 ;	  EBDETECT_MAKE_SUMCUBE
 ;
 ; PURPOSE:
-;	  This procedure produces a summed data cube from an input data cube by summing over given 
+;	  Create summed data cube from an input data cube by summing over given ;
 ;   wavelength indices.
 ;
 ; CATEGORY:
@@ -69,7 +69,6 @@ PRO EBDETECT_MAKE_SUMCUBE, inputfile, sum_positions, NLP=nlp, NS=ns, SET_NS=set_
 	IF (N_ELEMENTS(SUM_POSITIONS) LT 1) THEN sum_positions = INDGEN(nlp)
   ; Failsafe against out of range sum_positions
   sum_positions = sum_positions > 0 < (nlp-1)
-; sum_positions = sum_positions[UNIQ(sum_positions, SORT(sum_positions))]
   n_dims = SIZE(sum_positions, /N_DIMENSIONS)
   IF (n_dims LE 2) THEN BEGIN
     IF (n_dims EQ 2) THEN $
@@ -87,8 +86,7 @@ PRO EBDETECT_MAKE_SUMCUBE, inputfile, sum_positions, NLP=nlp, NS=ns, SET_NS=set_
       datatype = FITS2IDL_TYPE(header, /HEADER)
     ENDIF ELSE BEGIN
 	    LP_HEADER, inputfile, NX=nx, NY=ny, NT=imnt, DATATYPE=datatype
-      IF (N_ELEMENTS(NT) NE 1) THEN $;BEGIN
-    	  nt = imnt/nlp/ns
+      IF (N_ELEMENTS(NT) NE 1) THEN nt = imnt/nlp/ns
       offset = 512
     ENDELSE
 
@@ -119,7 +117,7 @@ PRO EBDETECT_MAKE_SUMCUBE, inputfile, sum_positions, NLP=nlp, NS=ns, SET_NS=set_
 	  pass = 0
 	  t0 = SYSTIME(/SECONDS)
 	  FOR t=0,nt-1 DO BEGIN
-      tmp_im = FLTARR(nx,ny) ;MAKE_ARRAY(nx,ny,TYPE=datatype)
+      tmp_im = FLTARR(nx,ny) 
       FOR ss=0,nsums-1 DO BEGIN
 	  	  FOR lp=0,N_ELEMENTS(sum_positions[*,ss])-1 DO BEGIN
           tmp_im += FLOAT(readfile[t*nlp*ns+sum_positions[lp,ss]*ns+set_ns])

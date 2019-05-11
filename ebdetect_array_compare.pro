@@ -3,7 +3,7 @@
 ;	  EBDETECT_ARRAY_COMPARE
 ;
 ; PURPOSE:
-;	  Compares two arrays and returns common elements as well as their indices.
+;	  Compare two arrays and returns common elements as well as their indices.
 ;
 ; CATEGORY:
 ;   Data analysis

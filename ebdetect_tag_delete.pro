@@ -3,7 +3,7 @@
 ;	  EBDETECT_TAG_DELETE
 ;
 ; PURPOSE:
-;	  Handles deleting structure tags and corresponding values for EBDETECT
+;	  Delete structure tags and corresponding values for EBDETECT
 ;
 ; CATEGORY:
 ;   Data analysis

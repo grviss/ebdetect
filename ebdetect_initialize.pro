@@ -3,7 +3,7 @@
 ;	  EBDETECT_INITIALIZE
 ;
 ; PURPOSE:
-;	  Handles initialising the configuration file for EBDETECT
+;	  Initialise variables from configuration file for EBDETECT
 ;
 ; CATEGORY:
 ;   Data analysis

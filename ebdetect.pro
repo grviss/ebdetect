@@ -3,9 +3,8 @@
 ;	  EBDETECT
 ;
 ; PURPOSE:
-;	  This routine is meant for Ellerman bomb detection, but detects anything
-;   above a certain intensity threshold and abiding by size and lifetime
-;   constraints.
+;   Detect and track Ellerman bombs (or any (solar) feature above user-defined
+;   intensity threshold and abiding by size and lifetime constraints).
 ;
 ; CATEGORY:
 ;   Data analysis
@@ -373,7 +372,6 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 ; Supply SUM_CUBE with filename if not continuing from before
 ; Set keyword WRITE_FIRST_DETECT to write detections to file
   IF NOT read_detect_any THEN BEGIN
-;	IF NOT (params.read_detect_init AND detect_init_file_exists) THEN BEGIN    
     IF (verbose GE 2) THEN BEGIN
       t_init = SYSTIME(/SECONDS)
       feedback_txt = 'Determining average intensities.'
@@ -762,7 +760,6 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
       ENDIF
     	pass = 0L
-    ;	totpasses = 0L
     	tt = 0
     	first_detect = 0
       detect_counter = -1
@@ -774,7 +771,6 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     		ENDIF
     		tt += 1
     	ENDWHILE
-    ;	FOR t=0L,params.nt-2 DO totpasses += LONG((*results[t]).ndetect)
     	t0 = SYSTIME(/SECONDS)
       ; Loop over all but the last time step
     	FOR t=0L,params.nt-1 DO BEGIN													
@@ -1066,8 +1062,6 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       feedback_txt = 'Grouping detections and applying lifetime constraints.'
       EBDETECT_FEEDBACK, feedback_txt+'..', /STATUS
     ENDIF
-  ;	IF (detect_counter NE -1) THEN $
-  ;    detections = PTRARR(detect_counter,/ALLOCATE_HEAP) $
   	IF (ndetections NE 0) THEN $
       detections = PTRARR(ndetections,/ALLOCATE_HEAP) $
     ELSE $
@@ -1078,7 +1072,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
   	FOR d=0L,ndetections-1 DO BEGIN											; Loop over all single detections
   		t_arr = [ ]
   		j_arr = [ ]
-      label_check = unique_labels[d]  ;d+1L
+      label_check = unique_labels[d]  
       IF (params.limit_group_search NE 0) THEN BEGIN
         ; Find first occurrence of current detection counter
         t_first = -1L
@@ -1215,7 +1209,6 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     ENDIF
   	FOR dd=0L,nsel_detections_orig-1 DO BEGIN											
       detlabel = (*detections[sel_detect_idx[dd]]).label
-  ;    print,dd,detpass,detlabel
       ; Compare the detection label with those of the detections to be removed
       IF (nremove_detections GE 1) THEN $
         whereremove = WHERE(params.remove_detections EQ detlabel) $
@@ -1422,7 +1415,6 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         		ENDFOR  ; j-loop
         	ENDFOR  ; tt-loop
           unique_kernellabels = LINDGEN(kernel_detect_counter)+1
-  ;      	IF (verbose EQ 2) THEN STOP
   
         	;;; Check for merging events ;;;
         	IF KEYWORD_SET(params.merge_check) THEN BEGIN

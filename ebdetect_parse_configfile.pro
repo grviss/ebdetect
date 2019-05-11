@@ -3,7 +3,7 @@
 ;	  EBDETECT_PARSE_CONFIGFILE
 ;
 ; PURPOSE:
-;	  Handles parsing the lines of the configuration file for EBDETECT
+;	  Parse line from configuration file for EBDETECT
 ;
 ; CATEGORY:
 ;   Data analysis

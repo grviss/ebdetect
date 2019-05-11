@@ -3,7 +3,7 @@
 ;	  EBDETECT_TIMER
 ;
 ; PURPOSE:
-;   This routine outputs the expected time until completion for a loop
+;   Output expected time until completion for a loop
 ;
 ; CATEGORY:
 ;   Utilities, timer
@@ -70,7 +70,6 @@ PRO EBDETECT_TIMER, pass, npass, t0, EXTRA_OUTPUT=extra_output, $
 	totalsectime = (timer_t-t0)/FLOAT(pass)*FLOAT(npass)    ; Estimate ETA in seconds
 	ndig = FLOOR(ALOG10(npass))+1                           ; Determine number of digits in completion
   leftsectime = totalsectime - accumsectime
-;	accumsectime = STRMID(TIME2STRING(accumsectime),0,8)    ; Convert accumulated time to time string
 	totalsectime = STRMID(TIME2STRING(totalsectime),0,8)    ; Convert estimated time to time string
 	leftsectime = STRMID(TIME2STRING(leftsectime),0,8)    ; Convert estimated time to time string
 

@@ -3,7 +3,7 @@
 ;	  EBDETECT_ARRAY_APPEND
 ;
 ; PURPOSE:
-;	  Appends values to an array (creating one if it doesn't yet exist)
+;	  Append values to an array (creating one if it doesn't yet exist)
 ;
 ; CATEGORY:
 ;   Array manipulation
