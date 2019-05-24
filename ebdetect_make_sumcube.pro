@@ -55,9 +55,7 @@ PRO EBDETECT_MAKE_SUMCUBE, inputfile, sum_positions, NLP=nlp, NS=ns, SET_NS=set_
   NT=nt, FITS=fits, WRITE_INPLACE=write_inplace, OUTPUTFILENAME=outputfilename,$
   OUTDIR=outdir, VERBOSE=verbose
 
-  id_string = '$Id$'
   IF (N_PARAMS() LT 2) THEN BEGIN
-    MESSAGE, id_string, /INFO
     MESSAGE,'Syntax: MK_SUMMED_CUBE, inputfile, sum_positions, NLP=nlp, '+$
       'NS=ns, SET_NS=set_ns, FITS=fits, WRITE_INPLACE=write_inplace, '+$
       'OUTPUTFILENAME=outputfilename, OUTDIR=outdir, VERBOSE=verbose',/INFO

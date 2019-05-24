@@ -42,9 +42,7 @@
 ;
 FUNCTION EBDETECT_TAG_DELETE, Structure, Tags, VERBOSE=verbose
 
-  id_string = '$Id$'
   IF (N_PARAMS() LT 2) THEN BEGIN
-    MESSAGE, id_string, /INFO
     MESSAGE, 'Syntax: result = EBDETECT_TAG_DELETE(Structure, Tags, [, /VERBOSE])', $
       /INFO
     RETURN, -1

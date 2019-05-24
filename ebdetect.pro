@@ -78,9 +78,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
 
 ;============================================================================== 
 
-  id_string = '$Id$'
   IF (N_PARAMS() LT 1) THEN BEGIN
-    MESSAGE, id_string, /INFO
     MESSAGE, 'Syntax: EBDETECT, ConfigFile [, VERBOSE=verbose]', /INFO
     RETURN
   ENDIF

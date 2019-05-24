@@ -45,9 +45,7 @@
 PRO EBDETECT_FEEDBACK, MessageString, DONE=done, STATUS=status, ERROR=error, $
   WARNING=warning, T_INIT=t_init, TERMINATE=terminate
 
-  id_string = '$Id$'
   IF ((N_PARAMS() LT 1) AND ~KEYWORD_SET(DONE)) THEN BEGIN
-    MESSAGE, id_string, /INFO
     MESSAGE, 'Syntax: EBDETECT_FEEDBACK [, MessageString] [, /DONE] '+$
       '[, /STATUS] [, /ERROR] [, /WARNING] [, /TERMINATE] [, T_INIT=t_init]', $
       /INFO

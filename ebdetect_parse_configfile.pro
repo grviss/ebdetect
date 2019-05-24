@@ -47,9 +47,7 @@
 
 FUNCTION EBDETECT_PARSE_CONFIGFILE, Inputline
   
-  id_string = '$Id$'
   IF (N_PARAMS() LT 1) THEN BEGIN
-    MESSAGE, id_string, /INFO
     MESSAGE, 'Syntax: result = EBDETECT_PARSE_CONFIGFILE(Inputline)', $
       /INFO
     RETURN, -1

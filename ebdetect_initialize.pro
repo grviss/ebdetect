@@ -43,9 +43,7 @@
 ;
 FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
 
-  id_string = '$Id$'
   IF (N_PARAMS() LT 1) THEN BEGIN
-    MESSAGE, id_string, /INFO
     MESSAGE, 'Syntax: result = EBDETECT_INITIALIZE(ConfigFile [, /VERBOSE])', $
       /INFO
     RETURN, -1

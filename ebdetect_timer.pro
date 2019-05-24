@@ -45,9 +45,7 @@
 PRO EBDETECT_TIMER, pass, npass, t0, EXTRA_OUTPUT=extra_output, $
   CALLBY=callby, DONE=done, TOTAL_TIME=total_time
 
-  id_string = '$Id$'
 	IF (N_PARAMS() LT 3) THEN BEGIN
-    MESSAGE, id_string, /INFO
 		MESSAGE, 'Syntax: EBDETECT_TIMER, pass, npass, t0 '+$
       '[, EXTRA_OUTPUT=extra_output] [, CALLBY=callby]', /INFO
 		RETURN

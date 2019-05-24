@@ -50,7 +50,6 @@
 FUNCTION EBDETECT_ARRAY_APPEND, Inputarray, Appendix, DIMS=dims
 
 	IF (N_PARAMS() LT 2) THEN BEGIN
-    MESSAGE, '$Id$', /INFO
 		MESSAGE, 'Syntax: result = EBDETECT_ARRAY_APPEND(Inputarray, Appendix '+$
       '[, DIMS=dims])', /INFO
 		RETURN, -1

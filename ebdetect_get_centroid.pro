@@ -45,9 +45,7 @@
 ;-
 FUNCTION EBDETECT_GET_CENTROID, SelDet, Mask, DIMS=dims, FLUX=flux
 
-  id_string = '$Id$'
   IF (N_PARAMS() LT 1) THEN BEGIN
-    MESSAGE, id_string, /INFO
     MESSAGE, 'Syntax: Result = EBDETECT_GET_CENTROID(Path_xy)', /INFO
     RETURN, -1
   ENDIF

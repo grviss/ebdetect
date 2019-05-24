@@ -1,5 +1,4 @@
 ## ebdetect_config.txt = configuration file for ebdetect.pro
-## Default configuration file version: $Id$
 ## comment out lines as needed using '#'
 
 ################################################################################

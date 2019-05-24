@@ -53,7 +53,6 @@
 FUNCTION EBDETECT_ARRAY_COMPARE, Array1, Array2, VERBOSE=verbose
 
 	IF (N_PARAMS() LT 2) THEN BEGIN
-    MESSAGE, '$Id$', /INFO
 		MESSAGE, 'Syntax: result = EBDETECT_ARRAY_COMPARE(Array1, Array2 '+$
       '[, /VERBOSE])', /INFO
 		RETURN, -1
