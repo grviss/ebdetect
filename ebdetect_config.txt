@@ -167,6 +167,13 @@ KERNEL_SIZE = 5
 # optional: remove certain false positive detections from the final sample.
 #REMOVE_DETECTIONS = 
 
+
+#################### Miscellaneous parameters ####################
+# optional: get geometric and flux-weighted centroids of each detection.
+# Defaults: 1 (= yes)
+#GET_CENTROIDS = 0
+
+
 ################################################################################
 ################################ OUTPUT SWITCHES ###############################
 ################################################################################
