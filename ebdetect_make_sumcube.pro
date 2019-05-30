@@ -7,11 +7,10 @@
 ;   wavelength indices.
 ;
 ; CATEGORY:
-;   Data analysis
+;   Data cube manipulation
 ;	
 ; CALLING SEQUENCE:
 ;   EBDETECT_MAKE_SUMCUBE, Inputfile, SumWavelengths
-;	
 ;
 ; INPUTS:
 ;	  Inputfile       - Inputfile in CRISPEX-ready format
@@ -34,14 +33,13 @@
 ;   VERBOSE         - User feedback verbosity. Defaults to not set.
 ;
 ; OUTPUTS:
+;   Data cube file in legacy La Palma format
 ;
 ; RESTRICTIONS:
 ;   Requires the following procedures and functions:
 ;   Procedures: LP_WRITE, EBDETECT_TIMER                [general]
 ;               LP_HEADER                               [in case of legacy cube]
 ;   Functions:  CRISPEX_FITSPOINTER(), FITS2IDL_TYPE()  [in case of FITS cube]
-;
-; PROCEDURE:
 ;
 ; EXAMPLE:
 ;
