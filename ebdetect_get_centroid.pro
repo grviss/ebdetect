@@ -27,12 +27,16 @@
 ;   2-element array containing the x- and y-coordinates of the centroid
 ;
 ; OPTIONAL OUTPUTS:
+;   None
 ;
 ; COMMON BLOCKS:
+;   None
 ;
 ; SIDE EFFECTS:
+;   None
 ;
 ; RESTRICTIONS:
+;   None
 ;
 ; PROCEDURE:
 ;
@@ -46,7 +50,8 @@
 FUNCTION EBDETECT_GET_CENTROID, SelDet, Mask, DIMS=dims, FLUX=flux
 
   IF (N_PARAMS() LT 1) THEN BEGIN
-    MESSAGE, 'Syntax: Result = EBDETECT_GET_CENTROID(Path_xy)', /INFO
+    MESSAGE, 'Syntax: Result = EBDETECT_GET_CENTROID(SelDet [, Mask] '+$
+      '[, DIMS=dims] [, /FLUX])', /INFO
     RETURN, -1
   ENDIF
  
