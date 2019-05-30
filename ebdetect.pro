@@ -13,12 +13,10 @@
 ;   EBDETECT, ConfigFile	
 ;
 ; INPUTS:
-;
-; OPTIONAL INPUTS:
 ;	  ConfigFile  - input configuration file that contains information on all 
 ;                 data files, detection parameters and switches. If not provided, 
-;                 EBDETECT will look for ebdetect_config.txt in the working
-;                 directory 
+;
+; OPTIONAL INPUTS:
 ;
 ; KEYWORD PARAMETERS:
 ;   OVERRIDE_PARAMS - Structure with tag names as defined in ConfigFile that
@@ -27,12 +25,12 @@
 ;                     parameters change for each run while the majority remains
 ;                     the same. 
 ;   VERBOSE         - Set verbosity level:
-;                       0 = no feedback
+;                       0 = no feedback (default)
 ;                       1 = initial parameters and progress timers
 ;                       2 = as 1, plus interim status reports, feedback movies
 ;                           and detection statistics
 ;                       3 = as 2, plus stopping in between major steps for
-;                           debugging. Defaults to 0.
+;                           debugging. 
 ;   NO_PLOT         - Set if plots should be suppressed. Has no effect unless 
 ;                     VERBOSE is set to 2 or higher. Defaults to 0.
 ;
@@ -74,12 +72,14 @@
 ;-
 ;
 PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
-  NO_PLOT=no_plot, OVERWRITE=overwrite
+  NO_PLOT=no_plot
 
 ;============================================================================== 
 
   IF (N_PARAMS() LT 1) THEN BEGIN
-    MESSAGE, 'Syntax: EBDETECT, ConfigFile [, VERBOSE=verbose]', /INFO
+    MESSAGE, 'Syntax: EBDETECT, ConfigFile '+$
+      '[, OVERRIDE_PARAMS=override_params] [, VERBOSE=verbose] '+$
+      '[, /NO_PLOT]', /INFO
     RETURN
   ENDIF
 
