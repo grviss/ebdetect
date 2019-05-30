@@ -18,10 +18,10 @@
 ;
 ; OPTIONAL INPUTS:
 ;   Sum_positions - Wavelength positions over which to sum. Defaults to all wavelengths (i.e.,
-;                   INDGEN(NLP).
+;                   INDGEN(NW).
 ;
 ; KEYWORD PARAMETERS:
-;   NLP           - Number of wavelength positions in inputfile. Defaults to 2.
+;   NW            - Number of wavelength positions in inputfile. Defaults to 2.
 ;   NS            - Number of Stokes parameters in the input cube. Defaults to 1.
 ;   SET_NS        - Selected Stokes parameter for the summing of the cube. Defaults to 0.
 ;   FITS          - Flag identifying Inputfile as FITS file. Defaults to 0
@@ -51,22 +51,22 @@
 ;-
 
 
-PRO EBDETECT_MAKE_SUMCUBE, inputfile, sum_positions, NLP=nlp, NS=ns, SET_NS=set_ns, $
+PRO EBDETECT_MAKE_SUMCUBE, inputfile, sum_positions, NW=nw, NS=ns, SET_NS=set_ns, $
   NT=nt, FITS=fits, WRITE_INPLACE=write_inplace, OUTPUTFILENAME=outputfilename,$
   OUTDIR=outdir, VERBOSE=verbose
 
   IF (N_PARAMS() LT 2) THEN BEGIN
-    MESSAGE,'Syntax: MK_SUMMED_CUBE, inputfile, sum_positions, NLP=nlp, '+$
+    MESSAGE,'Syntax: MK_SUMMED_CUBE, inputfile, sum_positions, NW=nw, '+$
       'NS=ns, SET_NS=set_ns, FITS=fits, WRITE_INPLACE=write_inplace, '+$
       'OUTPUTFILENAME=outputfilename, OUTDIR=outdir, VERBOSE=verbose',/INFO
     RETURN
   ENDIF
-	IF (N_ELEMENTS(NLP) NE 1) THEN nlp = 2
+	IF (N_ELEMENTS(NW) NE 1) THEN nw = 2
 	IF (N_ELEMENTS(NS) NE 1) THEN ns = 1
 	IF (N_ELEMENTS(SET_NS) NE 1) THEN set_ns = 0
-	IF (N_ELEMENTS(SUM_POSITIONS) LT 1) THEN sum_positions = INDGEN(nlp)
+	IF (N_ELEMENTS(SUM_POSITIONS) LT 1) THEN sum_positions = INDGEN(nw)
   ; Failsafe against out of range sum_positions
-  sum_positions = sum_positions > 0 < (nlp-1)
+  sum_positions = sum_positions > 0 < (nw-1)
   n_dims = SIZE(sum_positions, /N_DIMENSIONS)
   IF (n_dims LE 2) THEN BEGIN
     IF (n_dims EQ 2) THEN $
@@ -79,12 +79,12 @@ PRO EBDETECT_MAKE_SUMCUBE, inputfile, sum_positions, NLP=nlp, NS=ns, SET_NS=set_
       offset = CRISPEX_FITSPOINTER(inputfile, EXTEN_NO=0, header, /SILENT)
       nx = SXPAR(header, 'NAXIS1')
       ny = SXPAR(header, 'NAXIS2')
-      nlp = SXPAR(header, 'NAXIS3')
+      nw = SXPAR(header, 'NAXIS3')
       nt = SXPAR(header, 'NAXIS4')
       datatype = FITS2IDL_TYPE(header, /HEADER)
     ENDIF ELSE BEGIN
 	    LP_HEADER, inputfile, NX=nx, NY=ny, NT=imnt, DATATYPE=datatype
-      IF (N_ELEMENTS(NT) NE 1) THEN nt = imnt/nlp/ns
+      IF (N_ELEMENTS(NT) NE 1) THEN nt = imnt/nw/ns
       offset = 512
     ENDELSE
 
@@ -96,9 +96,9 @@ PRO EBDETECT_MAKE_SUMCUBE, inputfile, sum_positions, NLP=nlp, NS=ns, SET_NS=set_
 
     ; Output file information 
     IF KEYWORD_SET(VERBOSE) THEN BEGIN
-      EBDETECT_FEEDBACK, '  Input file dimensions: [nx,ny,nt,nlp,ns]=['+$
+      EBDETECT_FEEDBACK, '  Input file dimensions: [nx,ny,nt,nw,ns]=['+$
         STRTRIM(nx,2)+','+STRTRIM(ny,2)+','+STRTRIM(nt,2)+','+$
-        STRTRIM(nlp,2)+','+STRTRIM(ns,2)+']'
+        STRTRIM(nw,2)+','+STRTRIM(ns,2)+']'
       EBDETECT_FEEDBACK, '  Summing over positions: ['+$
         STRCOMPRESS(STRJOIN(sum_positions,','),/REMOVE_ALL)+']'
       EBDETECT_FEEDBACK, '  Writing result file "'+outputfilename+'" to "'+$
@@ -117,11 +117,11 @@ PRO EBDETECT_MAKE_SUMCUBE, inputfile, sum_positions, NLP=nlp, NS=ns, SET_NS=set_
 	  FOR t=0,nt-1 DO BEGIN
       tmp_im = FLTARR(nx,ny) 
       FOR ss=0,nsums-1 DO BEGIN
-	  	  FOR lp=0,N_ELEMENTS(sum_positions[*,ss])-1 DO BEGIN
-          tmp_im += FLOAT(readfile[t*nlp*ns+sum_positions[lp,ss]*ns+set_ns])
+	  	  FOR w=0,N_ELEMENTS(sum_positions[*,ss])-1 DO BEGIN
+          tmp_im += FLOAT(readfile[t*nw*ns+sum_positions[w,ss]*ns+set_ns])
 	  	  	pass += 1
-	  	  	EBDETECT_TIMER, pass, npass, t0, EXTRA_OUTPUT='(t,lp,s)=('+STRTRIM(t,2)+','+$
-                         STRTRIM(sum_positions[lp],2)+','+STRTRIM(set_ns,2)+').', $
+	  	  	EBDETECT_TIMER, pass, npass, t0, EXTRA_OUTPUT='(t,w,s)=('+STRTRIM(t,2)+','+$
+                         STRTRIM(sum_positions[w],2)+','+STRTRIM(set_ns,2)+').', $
                          /CALLBY
 	  	  ENDFOR
 	      tmp_im /= FLOAT(N_ELEMENTS(sum_positions[*,ss]))

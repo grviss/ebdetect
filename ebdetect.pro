@@ -168,7 +168,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       IF inputfile_exists THEN BEGIN
         ; Get input file dimensions
       	LP_HEADER,params.inputdir+params.inputfile, NX=nx, NY=ny, NT=imnt 
-    	  nt = imnt/params.nlp
+    	  nt = imnt/params.nw
       ENDIF ELSE BEGIN
         EBDETECT_FEEDBACK, /ERROR, /TERMINATE, $
           'No inputfile '+params.inputfile+' exists in directory '+$
@@ -324,7 +324,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     IF (verbose GE 2) THEN EBDETECT_FEEDBACK, /STATUS, $
       '> Creating summed wing cube...'
     EBDETECT_MAKE_SUMCUBE, params.inputdir+params.inputfile, $
-      params.wsum_pos, NLP=params.nlp, $
+      params.wsum_pos, NW=params.nw, $
       OUTPUTFILENAME=wsum_cube_filename, $
       WRITE_INPLACE=params.write_inplace, OUTDIR=params.outputdir
     ; Check whether wsum_pos is actually 2D in case wings are to be dealt with
@@ -349,7 +349,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     IF (verbose GE 2) THEN EBDETECT_FEEDBACK, /STATUS, $
       '> Creating summed line center cube...'
     EBDETECT_MAKE_SUMCUBE, params.inputdir+params.inputfile, $
-      params.lcsum_pos, NLP=params.nlp, $
+      params.lcsum_pos, NW=params.nw, $
       OUTPUTFILENAME=lcsum_cube_filename, $
       WRITE_INPLACE=params.write_inplace, OUTDIR=params.outputdir
     ; Now it exists and set the full filename

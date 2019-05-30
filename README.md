@@ -23,8 +23,8 @@ The detection process consists of four steps:
 
 ### Configuration file
 #### Required keywords
-* `INPUTFILE`: full filename (without path). Currently restricted to being a legacy SST/La Palma format cube (i.e. data order either `[nx, ny, nt]` or `[nx, ny, nlp, nt]`, with `nlp` and `nt` the size of the wavelength and time dimensions, respectively).
-* `NLP`: size of wavelength dimension in `INPUTFILE`. Defaults to 1.
+* `INPUTFILE`: full filename (without path). Currently restricted to being a legacy SST/La Palma format cube (i.e. data order either `[nx, ny, nt]` or `[nx, ny, nw, nt]`, with `nw` and `nt` the size of the wavelength and time dimensions, respectively).
+* `NW`: size of wavelength dimension in `INPUTFILE`. Defaults to 1.
 
 #### Semi-required keywords
 * `INTENSITY_CONSTRAINT`: intensity threshold in counts. Takes precedence over `SIGMA_CONSTRAINT`.

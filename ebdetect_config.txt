@@ -38,7 +38,7 @@ INPUTFILE = lcwsum_halpha.2010.06.28.strt.fcube
 #################### Data characterising keywords and switches
 # required: Number of wavelength positions of the input file 
 # Defaults: 1 
-NLP = 3
+NW = 3
 
 # optional: wing positions to sum over
 # Can be either 1D (e.g., [0,1,4,5]) or 2D array (e.g., [[0,1],[4,5]]). In the
