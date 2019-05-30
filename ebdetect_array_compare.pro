@@ -16,7 +16,7 @@
 ;   Array2  - input array of nArray2 elements
 ;
 ; OPTIONAL INPUTS:
-;	  
+;   None	  
 ;
 ; KEYWORD PARAMETERS:
 ;   VERBOSE - Prints out information on arrays. Defaults to 0.
@@ -32,16 +32,20 @@
 ;                             result.common_array
 ;
 ; OPTIONAL OUTPUTS:
+;   None
 ;
 ; COMMON BLOCKS:
+;   None
 ;
 ; SIDE EFFECTS:
+;   None
 ;
 ; RESTRICTIONS:
 ;   Requires the following function:
 ;     EBDETECT_ARRAY_APPEND()
 ;
 ; PROCEDURE:
+;   None
 ;
 ; EXAMPLE:
 ;
