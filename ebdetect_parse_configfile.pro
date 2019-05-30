@@ -6,7 +6,7 @@
 ;	  Parse line from configuration file for EBDETECT
 ;
 ; CATEGORY:
-;   Data analysis
+;   String manipulation
 ;	
 ; CALLING SEQUENCE:
 ;	  result = EBDETECT_PARSE_CONFIGFILE(Inputline)
@@ -16,22 +16,9 @@
 ;                equal sign ('=') is assumed to be used as delimiter between
 ;                keyword name and its value).
 ;
-; OPTIONAL INPUTS:
-;
-; KEYWORD PARAMETERS:
-;
 ; OUTPUTS:
 ;   Structure with the keyword 'field' name and its 'value' extracted from the
 ;   line. 
-; OPTIONAL OUTPUTS:
-;
-; COMMON BLOCKS:
-;
-; SIDE EFFECTS:
-;
-; RESTRICTIONS:
-;
-; PROCEDURE:
 ;
 ; EXAMPLE:
 ;   result = EBDETECT_PARSE_CONFIGFILE('field_txt = value_txt')

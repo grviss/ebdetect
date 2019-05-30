@@ -6,7 +6,7 @@
 ;	  Delete structure tags and corresponding values for EBDETECT
 ;
 ; CATEGORY:
-;   Data analysis
+;   Structure manipulation
 ;	
 ; CALLING SEQUENCE:
 ;	  result = EBDETECT_TAG_DELETE(Structure, Tags)
@@ -15,23 +15,11 @@
 ;	  Structure  - input structure
 ;   Tags       - single tag or array of tags to be removed from Structure
 ;
-; OPTIONAL INPUTS:
-;
 ; KEYWORD PARAMETERS:
 ;   VERBOSE    - output information on whether a certain tag is found or not
 ;
 ; OUTPUTS:
 ;   Structure where Tags have been removed.
-;
-; OPTIONAL OUTPUTS:
-;
-; COMMON BLOCKS:
-;
-; SIDE EFFECTS:
-;
-; RESTRICTIONS:
-;
-; PROCEDURE:
 ;
 ; EXAMPLE:
 ;   result = EBDETECT_TAG_DELETE(Structure, 'TAG_NAME1')
