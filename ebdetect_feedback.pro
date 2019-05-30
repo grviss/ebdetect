@@ -12,6 +12,7 @@
 ;   EBDETECT_FEEDBACK, MessageString
 ;
 ; INPUTS:
+;   None
 ;
 ; OPTIONAL INPUTS:
 ;	  MessageString - message to be displayed. Default: '' 
@@ -28,14 +29,19 @@
 ;   Message printed to the command line.
 ;
 ; OPTIONAL OUTPUTS:
+;   None
 ;
 ; COMMON BLOCKS:
+;   None
 ;
 ; SIDE EFFECTS:
+;   None
 ;
 ; RESTRICTIONS:
+;   None
 ;
 ; PROCEDURE:
+;   None
 ;
 ; EXAMPLE:
 ;
