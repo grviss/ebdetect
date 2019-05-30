@@ -23,18 +23,6 @@
 ;   input array does not exist, it will be initialised with value/array
 ;   "Appendix".
 ;
-; OPTIONAL OUTPUTS:
-;   None
-;
-; COMMON BLOCKS:
-;   None
-;
-; SIDE EFFECTS:
-;   None
-;
-; RESTRICTIONS:
-;   None
-;
 ; EXAMPLE:
 ;   IDL> FOR i=0,9 DO values = EBDETECT_ARRAY_APPEND(values, i)
 ;   IDL> HELP, values

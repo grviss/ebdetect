@@ -9,11 +9,11 @@
 ;   Utilities, timer
 ;
 ; CALLING SEQUENCE:
-;   EBDETECT_TIMER, pass, npass, t0
+;   EBDETECT_TIMER, Pass, nPass, t0
 ;
 ; INPUTS:
-;   pass  - counter of passes through the loop
-;   npass - total number of passes of the loop
+;   Pass  - counter of passes through the loop
+;   nPass - total number of passes of the loop
 ;   t0    - reference time in seconds, i.e., time before starting the loop
 ;
 ; KEYWORD PARAMETERS:
@@ -42,12 +42,13 @@
 ;   2016 Dec 01 GV: Added DONE and TOTAL_TIME keywords
 ;-
 
-PRO EBDETECT_TIMER, pass, npass, t0, EXTRA_OUTPUT=extra_output, $
+PRO EBDETECT_TIMER, Pass, nPass, t0, EXTRA_OUTPUT=extra_output, $
   CALLBY=callby, DONE=done, TOTAL_TIME=total_time
 
 	IF (N_PARAMS() LT 3) THEN BEGIN
-		MESSAGE, 'Syntax: EBDETECT_TIMER, pass, npass, t0 '+$
-      '[, EXTRA_OUTPUT=extra_output] [, CALLBY=callby]', /INFO
+		MESSAGE, 'Syntax: EBDETECT_TIMER, Pass, nPass, t0 '+$
+      '[, EXTRA_OUTPUT=extra_output] [, CALLBY=callby]'+$
+      '[, /DONE] [, /TOTAL_TIME]', /INFO
 		RETURN
 	ENDIF
 	
@@ -65,8 +66,8 @@ PRO EBDETECT_TIMER, pass, npass, t0, EXTRA_OUTPUT=extra_output, $
 
 	timer_t = SYSTIME(/SECONDS)                             ; Determine current time in seconds
 	accumsectime = (timer_t-t0)                             ; Determine accumulated time in seconds
-	totalsectime = (timer_t-t0)/FLOAT(pass)*FLOAT(npass)    ; Estimate ETA in seconds
-	ndig = FLOOR(ALOG10(npass))+1                           ; Determine number of digits in completion
+	totalsectime = (timer_t-t0)/FLOAT(Pass)*FLOAT(nPass)    ; Estimate ETA in seconds
+	ndig = FLOOR(ALOG10(nPass))+1                           ; Determine number of digits in completion
   leftsectime = totalsectime - accumsectime
 	totalsectime = STRMID(TIME2STRING(totalsectime),0,8)    ; Convert estimated time to time string
 	leftsectime = STRMID(TIME2STRING(leftsectime),0,8)    ; Convert estimated time to time string
@@ -75,9 +76,9 @@ PRO EBDETECT_TIMER, pass, npass, t0, EXTRA_OUTPUT=extra_output, $
 	WRITEU, -1, STRING(FORMAT='(%"\r'+callby+'Progress ",f7.3,"% (",i'+STRTRIM(ndig,2)+',"/",i'+STRTRIM(ndig,2)+$
               ',"). Estimated time left: ",a8,". ",a'+STRTRIM(STRLEN(extra_output),2)+')',$
               ; Values
-              STRTRIM(100.*pass/FLOAT(npass),2),STRTRIM(LONG(pass),2),STRTRIM(LONG(npass),2),$
+              STRTRIM(100.*Pass/FLOAT(nPass),2),STRTRIM(LONG(Pass),2),STRTRIM(LONG(nPass),2),$
               STRTRIM((leftsectime),2), extra_output)
-  IF (pass EQ npass) THEN BEGIN
+  IF (Pass EQ nPass) THEN BEGIN
     IF KEYWORD_SET(DONE) THEN BEGIN
       IF (STRCOMPRESS(extra_output) EQ '') THEN $
         PRINT, ' Done!' $

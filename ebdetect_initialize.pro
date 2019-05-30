@@ -14,25 +14,13 @@
 ; INPUTS:
 ;	  ConfigFile  - input text file setting all parameters
 ;
-; OPTIONAL INPUTS:
-;
-; KEYWORD PARAMETERS:
-;
 ; OUTPUTS:
 ;   Structure with parameters and switches used to run EBDETECT
-;
-; OPTIONAL OUTPUTS:
-;
-; COMMON BLOCKS:
-;
-; SIDE EFFECTS:
 ;
 ; RESTRICTIONS:
 ;   Requires the following procedures and functions:
 ;   Procedures: N/A
 ;   Functions:  EBDETECT_PARSE_CONFIGFILE(), 
-;
-; PROCEDURE:
 ;
 ; EXAMPLE:
 ;   result = EBDETECT_INITIALIZE('ebdetect_config.txt')
