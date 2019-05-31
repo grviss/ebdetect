@@ -17,6 +17,19 @@ The detection process consists of four steps:
 3. Overlap and continuity (minimum spatial overlap between frames and maximum skipped frames). Defaults to minimum overlap of 1 pixel (adjusted using `OVERLAP_CONSTRAINT`) and 0 skipped frames (adjusted using `T_SKIP_CONSTRAINT`).
 4. Lifetime constraint (lower or lower and upper limits). Defaults to `[0,nt]` range, but can be adjusted using `LIFETIME_CONSTRAINT` to a scalar or 2-element array.
 
+### Calling sequence
+To run `EBDETECT` one could issue one of the following calls in IDL:
+```
+   IDL> ebdetect, 'ebdetect_config.txt'
+   IDL> ebdetect, 'ebdetect_config.txt', OVERRIDE_PARAMS=override_params
+   IDL> ebdetect, 'ebdetect_config.txt', /VERBOSE
+   IDL> ebdetect, 'ebdetect_config.txt', VERBOSE=2, /NO_PLOT
+```
+The first call will run detection in quiet mode only writing files to disc as set by the output switches in the configuration file. 
+The second call allows overriding keyword parameters from the configuration file, which can be useful when e.g. looping over different parameter values to find the best settings or when running a detection grid. 
+The third call will output the initialisation of keywords from the configuration file and loop timers to the command line.
+The fourth call will additionally output interim status reports and detection statistics, but not display feedback movies (as `NO_PLOT` is set).
+
 ## Configuration file
 ### Required keywords
 * `INPUTFILE`: full filename (without path). Currently restricted to being a legacy SST/La Palma format cube (i.e. data order either `[nx, ny, nt]` or `[nx, ny, nw, nt]`, with `nw` and `nt` the size of the wavelength and time dimensions, respectively).
@@ -24,9 +37,9 @@ The detection process consists of four steps:
 
 ### Optional keywords
 #### Intensity thresholding
-* `SDEV_MULT_CONSTRAINT`: multiplier factor to determine the threshold as fraction of sigma above mean. Threshold gets calculated as: `threshold = I_mean + SDEV_MULT_CONSTRAINT * I_stdev`
-* `MEAN_MULT_CONSTRAINT`: multiplier factor to determine threshold as fraction of mean. Overrides setting of `SDEV_MULT_CONSTRAINT`. Threshold gets calculated as: `threshold = MEAN_MULT_CONSTRAINT * I_mean`
-* `INTENSITY_CONSTRAINT`: intensity threshold in counts. Takes precedence over both `SDEV_MULT_CONSTRAINT` and `MEAN_MULT_CONSTRAINT`.  Threshold gets calculated as: `threshold = INTENSITY_CONSTRAINT`
+* `SDEV_MULT_CONSTRAINT`: multiplier factor to determine the threshold as fraction of sigma above mean. Threshold gets calculated as: `threshold = I_mean + SDEV_MULT_CONSTRAINT * I_stdev`. Defaults to 0.
+* `MEAN_MULT_CONSTRAINT`: multiplier factor to determine threshold as fraction of mean. Overrides setting of `SDEV_MULT_CONSTRAINT`. Threshold gets calculated as: `threshold = MEAN_MULT_CONSTRAINT * I_mean`. Defaults to 1.
+* `INTENSITY_CONSTRAINT`: intensity threshold in counts. Takes precedence over both `SDEV_MULT_CONSTRAINT` and `MEAN_MULT_CONSTRAINT`.  Threshold gets calculated as: `threshold = INTENSITY_CONSTRAINT`.
 
 ## Output
 `EBDETECT` outputs an IDL save file with a pointer structure containing the detections. When `WRITE_MASK=1` is set in the configuration file (default behaviour), a data cube with boolean masks highlighting the detected pixels for every frame will also be saved.
