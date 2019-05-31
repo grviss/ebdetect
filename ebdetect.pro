@@ -69,6 +69,8 @@
 ;   2018 Jan 10 GV: Modified keyword behaviour governing reading in initial
 ;                   detection file
 ;   2018 Mar 11 GV: Enabled read-in of overlap detection results
+;   2019 May 31 GV: Modified intensity thresholding keywords to more intuitive
+;                   descriptors
 ;-
 ;
 PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
@@ -206,20 +208,28 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     comparison_mask_exists = FILE_TEST(params.inputdir + params.comparison_mask)
 
   ; Read-in of detection thresholds/constraints
-  ; Intensity thresholds and switches
+  ; Intensity thresholds and switches: INTENSITY_CONSTRAINT takes precedence
+  ; over MEAN_MULT_CONSTRAINT, which takes precedence over SDEV_MULT_CONSTRAINT
+  ; (which is the default behaviour)
   intensity_constraint_set = 0
+  mean_mult_constraint_set = 0
   intensity_constraint_idx = WHERE(STRLOWCASE(TAG_NAMES(params)) EQ $
     'intensity_constraint', count)
   IF (count NE 0) THEN $
     intensity_constraint_set = FINITE(params.intensity_constraint)
-  IF (N_ELEMENTS(params.sigma_constraint) GE 1) THEN $
-    sigma_constraint = params.sigma_constraint[SORT(params.sigma_constraint)] 
+  IF (intensity_constraint_set EQ 0) THEN BEGIN
+    mean_mult_constraint_idx = WHERE(STRLOWCASE(TAG_NAMES(params)) EQ $
+      'mean_mult_constraint', count)
+    IF (count NE 0) THEN $
+      mean_mult_constraint_set = (params.mean_mult_constraint NE 1.)
+  ENDIF
+  sdev_mult_constraint_set = ((intensity_constraint_set EQ 0) AND $
+                              (mean_mult_constraint_set EQ 0))
   IF intensity_constraint_set THEN $
     nlevels = N_ELEMENTS(params.intensity_constraint) $
-  ELSE $
-    nlevels = N_ELEMENTS(sigma_constraint)
-  IF (N_ELEMENTS(params.lc_sigma) GT 1) THEN $
-    lc_sigma = params.lc_sigma[SORT(params.lc_sigma)]
+  ELSE IF mean_mult_constraint_set THEN  $
+    nlevels = N_ELEMENTS(params.mean_mult_constraint) $
+  ELSE nlevels = 1    ; Only allow scalar SDEV_MULT_CONSTRAINT for now
   IF (N_ELEMENTS(params.region_threshold) EQ 4) THEN $
     region_threshold_set = (TOTAL(params.region_threshold) NE 0) $
   ELSE $
@@ -250,13 +260,14 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       int_label +=STRJOIN(STRTRIM(params.intensity_constraint,2),'-') $
     ELSE $
       int_label +=STRTRIM(params.intensity_constraint,2)
-  ENDIF ELSE BEGIN
-    int_label = '_stdev'
-    IF (N_ELEMENTS(params.sigma_constraint) GT 1) THEN $
-      int_label +=STRJOIN(STRTRIM(params.sigma_constraint,2),'-') $
+  ENDIF ELSE IF mean_mult_constraint_set THEN BEGIN
+    int_label = '_mnint'
+    IF (N_ELEMENTS(params.mean_mult_constraint) GT 1) THEN $
+      int_label +=STRJOIN(STRTRIM(params.mean_mult_constraint,2),'-') $
     ELSE $
-      int_label +=STRTRIM(params.sigma_constraint,2)
-  ENDELSE
+      int_label +=STRTRIM(params.mean_mult_constraint,2)
+  ENDIF ELSE $
+    int_label = '_stdev' + STRTRIM(params.sdev_mult_constraint,2)
   IF params.lc_constraint THEN $
     lc_label = '_lcsdv'+STRTRIM(params.lc_sigma,2) $
   ELSE lc_label = ''
@@ -392,7 +403,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       IF KEYWORD_SET(calc_running_mean) THEN BEGIN
         ; Initialise variables for RUNNING_MEAN if set and if not reading from file
         running_mean_summed_cube = FLTARR(params.nt,nwsums)
-        IF ~KEYWORD_SET(params.factor_sigma) THEN $
+        IF sdev_mult_constraint_set THEN $
           running_sdev = FLTARR(params.nt,nwsums) $
         ELSE $
           running_sdev = -1
@@ -418,7 +429,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
               running_mean_summed_cube[t,*] = MEAN(subsel_summed_cube, $
                 DIMENSION=1, /DOUBLE, /NAN)
               ; Determine the standard deviation in the cube
-              IF ~KEYWORD_SET(params.factor_sigma) THEN $
+              IF sdev_mult_constraint_set THEN $
         	  	  running_sdev[t,*] = STDDEV(DOUBLE(subsel_summed_cube), /NAN, $
                   DIMENSION=1) 
               IF (verbose GE 1) THEN $
@@ -444,7 +455,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
                   running_mean_summed_cube[t,ss] = $
                     MEAN(subsel_summed_cube, /DOUBLE, /NAN)
                   ; Determine the standard deviation in the cube
-                  IF ~KEYWORD_SET(params.factor_sigma) THEN $
+                  IF sdev_mult_constraint_set THEN $
         		        running_sdev[t,ss] = STDDEV(DOUBLE(subsel_summed_cube), /NAN)
                 ENDIF ELSE $
                   tmp_sel_summed_cube = EBDETECT_ARRAY_APPEND(tmp_sel_summed_cube, $
@@ -477,7 +488,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           running_mean_summed_cube[t,*] = MEAN(subsel_summed_cube, $
             DIMENSION=1, /DOUBLE, /NAN)
           ; Determine the standard deviation in the cube
-          IF ~KEYWORD_SET(params.factor_sigma) THEN $
+          IF sdev_mult_constraint_set THEN $
    	       running_sdev[t,*] = STDDEV(DOUBLE(subsel_summed_cube), /NAN, $
               DIMENSION=1) 
           IF (verbose GE 1) THEN $
@@ -490,7 +501,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           [params.nx*params.ny*params.nt, nwsums])
       ; Calculate mean (and sdev) if not already done for running mean
       IF NOT KEYWORD_SET(calc_running_mean) THEN BEGIN
-        IF ~KEYWORD_SET(params.factor_sigma) THEN $
+        IF sdev_mult_constraint_set THEN $
           ; Determine the standard deviation in the cube
 	        sdev = STDDEV(DOUBLE(sel_summed_cube),/NAN, DIMENSION=1) 
         ; Determine the average of the cube
@@ -570,20 +581,17 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
       threshold = FLTARR(params.nt, nwsums, nlevels)
       IF (KEYWORD_SET(calc_running_mean) OR KEYWORD_SET(read_running_mean)) THEN BEGIN
         mean_summed_cube = running_mean_summed_cube
-        IF ~KEYWORD_SET(params.factor_sigma) THEN $
-          sdev = running_sdev
+        IF sdev_mult_constraint_set THEN sdev = running_sdev
       ENDIF ELSE BEGIN
         mean_summed_cube = REPLICATE(1., params.nt) # mean_summed_cube
-        IF ~KEYWORD_SET(params.factor_sigma) THEN $
-          sdev = REPLICATE(1., params.nt) # sdev
+        IF sdev_mult_constraint_set THEN sdev = REPLICATE(1., params.nt) # sdev
       ENDELSE
       FOR t=0,params.nt-1 DO BEGIN
-        ; Allow for hysteresis constraints
-        IF KEYWORD_SET(params.factor_sigma) THEN $
-          threshold[t,*,*] = REFORM(mean_summed_cube[t,*])#params.sigma_constraint $
+        IF mean_mult_constraint_set THEN $
+          threshold[t,*,*] = REFORM(mean_summed_cube[t,*])#params.mean_mult_constraint $
         ELSE $
           threshold[t,*,*] = REFORM(mean_summed_cube[t,*])#REPLICATE(1., nlevels) + $
-            REFORM(sdev[t,*])#params.sigma_constraint
+            REFORM(sdev[t,*])#params.sdev_mult_constraint
       ENDFOR
     ENDELSE
 		t0 = SYSTIME(/SECONDS)
