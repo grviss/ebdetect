@@ -18,6 +18,12 @@ The detection process consists of four steps:
 4. Lifetime constraints. Defaults to `[0,nt]` range, but can be adjusted using `LIFETIME_CONSTRAINT`.
 
 ### Calling sequence
+Information on the calling sequence syntax can be obtained by simply typing `ebdetect` on the IDL command line:
+```
+   IDL> ebdetect
+   % EBDETECT: Syntax: EBDETECT, ConfigFile [, OVERRIDE_PARAMS=override_params] [, VERBOSE=verbose] [, /NO_PLOT]
+```
+
 To run `EBDETECT` one could issue one of the following calls in IDL:
 ```
    IDL> ebdetect, 'ebdetect_config.txt'
@@ -37,7 +43,7 @@ Details on the different keyword settings can be found in the configuraion file 
 * `INPUTFILE`: full filename (without path). Currently restricted to being a legacy SST/La Palma format cube (i.e. data order either `[nx, ny, nt]` or `[nx, ny, nw, nt]`, with `nw` and `nt` the size of the wavelength and time dimensions, respectively).
 * `NW`: size of wavelength dimension in `INPUTFILE`. Defaults to 1.
 
-### Optional keywords
+### Selected optional keywords
 * `SDEV_MULT_CONSTRAINT`: multiplier factor to determine the threshold as fraction of sigma above mean (i.e. `threshold = I_mean + SDEV_MULT_CONSTRAINT * I_stdev`). Defaults to 0.
 * `MEAN_MULT_CONSTRAINT`: multiplier factor to determine threshold as fraction of mean (i.e. `threshold = MEAN_MULT_CONSTRAINT * I_mean`). Overrides setting of `SDEV_MULT_CONSTRAINT`. Defaults to 1.
 * `INTENSITY_CONSTRAINT`: intensity threshold in counts (i.e. `threshold = INTENSITY_CONSTRAINT`). Takes precedence over both `SDEV_MULT_CONSTRAINT` and `MEAN_MULT_CONSTRAINT`.
