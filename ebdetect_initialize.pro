@@ -46,14 +46,14 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
     ; Detection parameters
     nw:1L, nx:1L, ny:1L, nt:1L, wsum_pos:0L, lcsum_pos:0L, $
     asecpix:[1.,1.], intensity_constraint:!VALUES.F_NAN, $
-    sigma_constraint:0., lc_sigma:0., lifetime_constraint:[0L,1L], $
+    sdev_mult_constraint:0., mean_mult_constraint:1., lc_sigma:0., lifetime_constraint:[0L,1L], $
     size_constraint:[1L,1L], overlap_constraint:1L, t_skip_constraint:0L, $
     limit_group_search:0L, $
     kernel_size:[1L,1L], running_mean:0L, $
     region_threshold:[0L,0L,0L,0L], remove_detections:-1, $
     override_merge:[-1,-1,-1,-1], $
     ; Switches
-    sum_cube:0B, factor_sigma:0B, get_kernels:0B, get_centroids:1B, $
+    sum_cube:0B, get_kernels:0B, get_centroids:1B, $
     lc_constraint:0B, merge_check:1B, split_check:1B, $
     read_detect_init:0B, write_detect_init:1B, $
     read_detect_overlap:0B, write_detect_overlap:1B,$

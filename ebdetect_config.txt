@@ -61,26 +61,27 @@ ASECPIX = [0.0592, 0.0592]
 ################################################################################
 
 #################### Intensity thresholding ####################
-# semi-optional: intensity threshold in (per frame) data units
-# Must be set if SIGMA_CONSTRAINT is not supplied. If set, SIGMA_CONSTRAINT will
-# be ignored. 
-# Defaults: !VALUES.F_NAN. May be a 2-element array.
+# optional: get intensity threshold as fraction of standard deviation above mean.
+# Default thresholding setting. May be overridden by either MEAN_MULT_CONSTRAINT
+# or INTENSITY_CONSTRAINT.  
+# Intensity threshold is calculated as:
+#   threshold = mean + sdev_mult_constraint * stdev
+# Defaults: 0. Must be scalar.
+# SDEV_MULT_CONSTRAINT = 0.
+
+# optional: get intensity threshold as fraction of (running) mean .
+# Overrides SDEV_MULT_CONSTRAINT and may be overridden by INTENSITY_CONSTRAINT.
+# Intensity threshold will be calculated as:
+#   threshold = mean_mult_constraint * mean
+# Defaults: 1. May be scalar or 2-element array.
+MEAN_MULT_CONSTRAINT = [1.45,1.3]
+
+# optional: intensity threshold in data units. 
+# Overrides setting of MEAN_MULT_CONSTRAINT or SDEV_MULT_CONSTRAINT. 
+# Intensity threshold will be calculated as:
+#   threshold = intensity_constraint
+# Defaults: !VALUES.F_NAN. May be scalar or 2-element array.
 # INTENSITY_CONSTRAINT = 3000.
-
-# semi-optional: factor to determine the intensity threshold.
-# Must be set if INTENSITY_CONSTRAINT is not supplied. If INTENSITY_CONSTRAINT is
-# set, SIGMA_CONSTRAINT (and FACTOR_SIGMA) will be ignored.
-# Unless FACTOR_SIGMA is set, the intensity threshold is calculated as: 
-#   threshold = mean + sigma_constraint * stdev
-# Defaults: 0. May be a 2-element array.
-SIGMA_CONSTRAINT = [1.55,1.4]
-
-# optional: switch to state that the threshold should not be obtained by
-# multiplying SIGMA_CONSTRAINT by the standard deviation, but rather by
-# multiplying SIGMA_CONSTRAINT directly with the mean.
-# If set, intensity threshold is calculated as:
-#   threshold = mean * sigma_constraint
-FACTOR_SIGMA = 1
 
 # optional: region over which the mean and standard deviation should be
 # calculated. Takes either a string filename of a mask cube or a 4-element array
