@@ -5,7 +5,7 @@
 
 `EBDETECT` is a solar feature detection and tracking code developed to identify Ellerman and UV bursts based on intensity thresholding, as well as size, continuity and lifetime constraints. The procedure and results from detection in SST H&alpha; and SDO/AIA 1700Å data are described in [Vissers et al. (2019)](https://arxiv.org/abs/1901.07975) (see above ADS and arXiv links).
 
-The code is provided "as-is". Bug reports are appreciated and encouraged, but dedicated support will only be provided within a scientific collaboration.
+The code is written in the Interactive Data Language (IDL) and is provided "as-is". Bug reports are appreciated and encouraged, but dedicated support will only be possible within a scientific collaboration.
 
 ## Running EBDETECT
 The minimal input required for `EBDETECT` to run is a plain-text configuration file, wherein the data file (currently only legacy SST/La Palma &mdash; i.e. CRISPEX-ready &mdash; format allowed) that detection will be performed on is specified.
