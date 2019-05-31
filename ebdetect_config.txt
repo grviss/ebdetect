@@ -18,10 +18,10 @@ INPUTFILE = halpha.2010.06.28.strt.fcube
 # Defaults: 0 (= not a summed cube)
 #SUM_CUBE = 1
 
-# optional: 
+# optional: line-core summed cube to use if LC_CONSTRAINT is set.
 #LCSUM_CUBE = lcwsum_halpha.2010.06.28.strt.fcube
 
-# optional: data cube with a mask that is used to overlay
+# optional: data cube with a mask that is used to overlay in feedback movies
 #COMPARISON_MASK = 
 
 # optional: switch to look for and (if present) read in the initial detection
@@ -51,7 +51,8 @@ WSUM_POS = [0,2]
 # Defaults: 0
 #LCSUM_POS = 1
 
-# optional: pixel x- and y-size in arcsec
+# optional: pixel x- and y-size in arcsec. Used for determining area-weighted
+# centroids.
 # Defaults: [1,1] 
 ASECPIX = [0.0592, 0.0592]
 
@@ -104,6 +105,7 @@ MEAN_MULT_CONSTRAINT = [1.45,1.3]
 # running mean. Defaults: 0
 #RUNNING_MEAN = 
 
+
 #################### Size thresholding ####################
 # optional: size constraint in number of interconnected pixels. Can be only
 # lower limit or lower and upper limit (e.g., size_constraint = [5,20]).
@@ -138,7 +140,7 @@ LIMIT_GROUP_SEARCH = 0
 # optional: check for merging features. If so, retains the label of bigger
 # feature.
 # Defaults: 1 (= yes)
-MERGE_CHECK = 1
+#MERGE_CHECK = 0
 
 # optional: override the merging for certain detections. Takes a 4-element array
 # with elements [tlow, tupp, oldlabel, newlabel].
@@ -147,27 +149,28 @@ MERGE_CHECK = 1
 # optional: check for splitting features. If so, bigger feature retains label,
 # smaller feature gets new label
 # Defaults: 1 (= yes)
-SPLIT_CHECK = 1
+#SPLIT_CHECK = 0
 
 
 # optional: save results of bright kernels within detections. Works only if
 # SIGMA_CONSTRAINT is a 2-element array, where kernels will be those pixels
 # above the highest intensity threshold.
 # Defaults: 0 (= no)
-GET_KERNELS = 0
+#GET_KERNELS = 1
 
 # optional: size constraint in number of interconnected pixels for bright
 # kernels. Can be only lower limit or lower and upper limit (e.g., 
 # kernel_size = [5,10]). 
 # Defaults: [0,nx*ny]. Is only used if the GET_KERNELS switch is set.
-KERNEL_SIZE = 5
+#KERNEL_SIZE = 5
 
 # optional: remove certain false positive detections from the final sample.
 #REMOVE_DETECTIONS = 
 
 
 #################### Miscellaneous parameters ####################
-# optional: get geometric and flux-weighted centroids of each detection.
+# optional: get geometric and flux-weighted centroids of each detection. Note:
+# Cannot run with GET_CENTROIDS = 1 in Unix screen. 
 # Defaults: 1 (= yes)
 #GET_CENTROIDS = 0
 
@@ -184,12 +187,12 @@ WRITE_MASK = 1
 # thresholding, prior to all other limiting constraints and merging/splitting
 # checks)
 # Defaults: 1 (= yes)
-WRITE_DETECT_INIT = 1
+#WRITE_DETECT_INIT = 0
 
 # optional: write results with only those detections that overlap within
 # lifetime_constraint frames
 # Defaults: 1 (= yes)
-WRITE_DETECT_OVERLAP = 1
+#WRITE_DETECT_OVERLAP = 0
 
 # optional: write results with detections surviving all limiting constraints and
 # accounting for merging/splitting
