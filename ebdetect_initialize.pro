@@ -49,7 +49,7 @@ FUNCTION EBDETECT_INITIALIZE, ConfigFile, VERBOSE=verbose
     sigma_constraint:0., lc_sigma:0., lifetime_constraint:[0L,1L], $
     size_constraint:[1L,1L], overlap_constraint:1L, t_skip_constraint:0L, $
     limit_group_search:0L, $
-    loose_hysteresis:0B, kernel_size:[1L,1L], running_mean:0L, $
+    kernel_size:[1L,1L], running_mean:0L, $
     region_threshold:[0L,0L,0L,0L], remove_detections:-1, $
     override_merge:[-1,-1,-1,-1], $
     ; Switches

@@ -1,4 +1,5 @@
 ## ebdetect_config.txt = configuration file for ebdetect.pro
+## defaults are set in ebdetect_initialize.pro and at runtime in ebdetect.pro
 ## comment out lines as needed using '#'
 
 ################################################################################
@@ -11,7 +12,7 @@
 #OUTPUTDIR = ./
 
 # required: data cube in which the detection is going to be done. 
-INPUTFILE = lcwsum_halpha.2010.06.28.strt.fcube
+INPUTFILE = halpha.2010.06.28.strt.fcube
 
 # optional: switch to identify that INPUTFILE is a summed cube or not.
 # Defaults: 0 (= not a summed cube)
@@ -48,7 +49,7 @@ WSUM_POS = [0,2]
 
 # optional: line core positions to sum over
 # Defaults: 0
-LCSUM_POS = 1
+#LCSUM_POS = 1
 
 # optional: pixel x- and y-size in arcsec
 # Defaults: [1,1] 
@@ -80,10 +81,6 @@ SIGMA_CONSTRAINT = [1.55,1.4]
 # If set, intensity threshold is calculated as:
 #   threshold = mean * sigma_constraint
 FACTOR_SIGMA = 1
-
-# optional: apply double intensity criterion 
-# Defaults: 0 (= no)
-LOOSE_HYSTERESIS = 1
 
 # optional: region over which the mean and standard deviation should be
 # calculated. Takes either a string filename of a mask cube or a 4-element array

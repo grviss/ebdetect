@@ -634,7 +634,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
         WHILE get_structures DO BEGIN
           ; Grow the region if more than one pixel; else assign pixel directly
           IF (nwheregt1 GT 1) THEN BEGIN
-            IF KEYWORD_SET(params.loose_hysteresis) THEN $
+            IF (nlevels EQ 1) THEN $
 					  	struct_pix = REGION_GROW(pad_mask,wheregt1[0],/ALL)	$
             ELSE BEGIN
 					    struct_pix = REGION_GROW(pad_mask,wheregt1[0],/ALL, THRESH=[1,2])
