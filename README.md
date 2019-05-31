@@ -24,9 +24,9 @@ The detection process consists of four steps:
 
 ### Optional keywords
 #### Intensity thresholding
-* `SDEV_MULT_CONSTRAINT`: multiplier factor to determine the threshold as fraction of sigma above mean. Threshold gets calculated as: `threshold = I_mean + SDEV_MULT_CONSTRAINT * I_stdev`
-* `MEAN_MULT_CONSTRAINT`: multiplier factor to determine threshold as fraction of mean. Overrides setting of `SDEV_MULT_CONSTRAINT`. Threshold gets calculated as: `threshold = MEAN_MULT_CONSTRAINT * I_mean`
-* `INTENSITY_CONSTRAINT`: intensity threshold in counts. Takes precedence over both `SDEV_MULT_CONSTRAINT` and `MEAN_MULT_CONSTRAINT`.  Threshold gets calculated as: `threshold = INTENSITY_CONSTRAINT`
+* `SDEV_MULT_CONSTRAINT`: multiplier factor to determine the threshold as fraction of sigma above mean. Threshold gets calculated as: `threshold = I_mean + SDEV_MULT_CONSTRAINT * I_stdev`. Defaults to 0.
+* `MEAN_MULT_CONSTRAINT`: multiplier factor to determine threshold as fraction of mean. Overrides setting of `SDEV_MULT_CONSTRAINT`. Threshold gets calculated as: `threshold = MEAN_MULT_CONSTRAINT * I_mean`. Defaults to 1.
+* `INTENSITY_CONSTRAINT`: intensity threshold in counts. Takes precedence over both `SDEV_MULT_CONSTRAINT` and `MEAN_MULT_CONSTRAINT`.  Threshold gets calculated as: `threshold = INTENSITY_CONSTRAINT`.
 
 ## Output
 `EBDETECT` outputs an IDL save file with a pointer structure containing the detections. When `WRITE_MASK=1` is set in the configuration file (default behaviour), a data cube with boolean masks highlighting the detected pixels for every frame will also be saved.
