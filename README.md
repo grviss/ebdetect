@@ -1,6 +1,6 @@
 # ebdetect
 [![github](https://img.shields.io/badge/GitHub-grviss%2Febdetect-blue.svg?style=flat)](https://github.com/grviss/ebdetect)
-[![ADS](https://img.shields.io/badge/ADS-arXiv190107975V-red.svg)](https://ui.adsabs.harvard.edu/abs/2019arXiv190107975V/abstract)
+[![ADS](https://img.shields.io/badge/ADS-2019A&A...626A...4V-red.svg)](https://ui.adsabs.harvard.edu/abs/2019A%26A...626A...4V/abstract)
 [![arxiv](https://img.shields.io/badge/arxiv-1901.07975-orange.svg?style=flat)](https://arxiv.org/abs/1901.07975)
 
 `EBDETECT` is a solar feature detection and tracking code developed to identify Ellerman and UV bursts based on intensity thresholding, as well as size, continuity and lifetime constraints. The procedure and results from detection in SST H&alpha; and SDO/AIA 1700Å data are described in [Vissers et al. (2019)](https://arxiv.org/abs/1901.07975) (see above ADS and arXiv links).
