@@ -221,7 +221,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
     mean_mult_constraint_idx = WHERE(STRLOWCASE(TAG_NAMES(params)) EQ $
       'mean_mult_constraint', count)
     IF (count NE 0) THEN $
-      mean_mult_constraint_set = (params.mean_mult_constraint NE 1.)
+      mean_mult_constraint_set = (TOTAL(params.mean_mult_constraint NE 1.) GE 1)
   ENDIF
   sdev_mult_constraint_set = ((intensity_constraint_set EQ 0) AND $
                               (mean_mult_constraint_set EQ 0))
