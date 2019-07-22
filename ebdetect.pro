@@ -699,7 +699,10 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
                 intensities = EBDETECT_ARRAY_APPEND(intensities, REFORM($
                   select_summed_cube[positions2d[0,pp],positions2d[1,pp],*]), $
                   DIMS=2)
-              flux = TOTAL(ABS(intensities) * pixarea, 1+(nwsums GT 1))
+              IF (npix GT 1) THEN $
+                flux = TOTAL(ABS(intensities) * pixarea, 1+(nwsums GT 1)) $
+              ELSE $
+                flux = ABS(intensities) * pixarea
               ; Write results to pointer
 							*structs[j] = CREATE_STRUCT('label',label_vals[j]+totnlabels,$
                 'pos',positions, 'int', intensities, 'flux', flux)	
