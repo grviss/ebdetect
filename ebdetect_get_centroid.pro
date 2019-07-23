@@ -22,21 +22,11 @@
 ;   DIMS    - XY-dimensions of the full field of view. Defaults to not set and
 ;             is ignored if Mask is set.
 ;   FLUX    - Compute the flux-weighted average centroid. Defaults to not set.
+;   NWSUMS  - Number of wing blocks that EBDETECT thresholds over. Defaults to 1.
 ;
 ; OUTPUTS:
-;   2-element array containing the x- and y-coordinates of the centroid
-;
-; OPTIONAL OUTPUTS:
-;   None
-;
-; COMMON BLOCKS:
-;   None
-;
-; SIDE EFFECTS:
-;   None
-;
-; RESTRICTIONS:
-;   None
+;   Structure with geometric and flux-weighted centroids, each a 2-element
+;   array containing the respective x- and y-coordinates of the centroid
 ;
 ; PROCEDURE:
 ;
@@ -45,7 +35,9 @@
 ; MODIFICATION HISTORY:
 ;   Inspiration from https://en.wikipedia.org/wiki/Centroid
 ;   2017 Aug 22 Gregal Vissers: First version
-;   2017 Dec 4 GV: Fixed error with optional (keyword) parameters
+;   2017 Dec 4 GV:  Fixed error with optional (keyword) parameters
+;   2019 Jul 23 GV: Added NWSUMS keyword fixing flux-weighted centroid for 2D
+;                   SelDet.int
 ;-
 FUNCTION EBDETECT_GET_CENTROID, SelDet, Mask, DIMS=dims, FLUX=flux, $
   NWSUMS=nwsums
