@@ -57,6 +57,7 @@ FUNCTION EBDETECT_GET_CENTROID, SelDet, Mask, DIMS=dims, FLUX=flux, $
       mask[SelDet.pos] = 1B
     ENDELSE
   ENDIF
+  IF (N_ELEMENTS(NWSUMS) LT 1) THEN nwsums = 1
   CONTOUR, Mask, PATH_XY=path_xy, /PATH_DATA_COORDS, PATH_INFO=path_info
   sel_path_xy = FLTARR(2,path_info[0].n+1)
   sel_path_xy[*,0:((path_info[0]).n-1)] = path_xy[*,0:((path_info[0]).n-1)]
