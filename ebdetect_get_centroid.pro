@@ -47,7 +47,8 @@
 ;   2017 Aug 22 Gregal Vissers: First version
 ;   2017 Dec 4 GV: Fixed error with optional (keyword) parameters
 ;-
-FUNCTION EBDETECT_GET_CENTROID, SelDet, Mask, DIMS=dims, FLUX=flux
+FUNCTION EBDETECT_GET_CENTROID, SelDet, Mask, DIMS=dims, FLUX=flux, $
+  NWSUMS=nwsums
 
   IF (N_PARAMS() LT 1) THEN BEGIN
     MESSAGE, 'Syntax: Result = EBDETECT_GET_CENTROID(SelDet [, Mask] '+$
@@ -89,8 +90,16 @@ FUNCTION EBDETECT_GET_CENTROID, SelDet, Mask, DIMS=dims, FLUX=flux
     xys = LONARR(2,npos)
     FOR j=0,npos-1 DO $
       xys[*,j] = ARRAY_INDICES(Mask, SelDet.pos[j])
-    cx_flux = TOTAL(xys[0,*] * SelDet.int) / FLOAT(TOTAL(SelDet.int))
-    cy_flux = TOTAL(xys[1,*] * SelDet.int) / FLOAT(TOTAL(SelDet.int))
+    IF (nwsums GT 1) THEN BEGIN
+      IF (npos GT 1) THEN $
+        int_max = MAX(MEAN(SelDet.int, DIM=2, /NAN), wheremax) $
+      ELSE $
+        int_max = MAX(SelDet.int, /NAN, wheremax)
+      int_tmp = SelDet.int[wheremax,*]
+    ENDIF ELSE $
+      int_tmp = SelDet.int
+    cx_flux = TOTAL(xys[0,*] * int_tmp) / FLOAT(TOTAL(int_tmp))
+    cy_flux = TOTAL(xys[1,*] * int_tmp) / FLOAT(TOTAL(int_tmp))
     xy_flux = [cx_flux, cy_flux]
   ENDIF ELSE xy_flux = !VALUES.F_NAN
 

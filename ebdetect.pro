@@ -1237,7 +1237,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
           ; Get centroids
           IF KEYWORD_SET(params.get_centroids) THEN BEGIN
             centroid = EBDETECT_GET_CENTROID(*(*sel_detections[detpass]).det[tt], $
-              mask, /FLUX)
+              mask, /FLUX, NWSUMS=nwsums)
             xy[*,tt] = centroid.xy_geom
             xy_flux[*,tt] = centroid.xy_flux
             (*(*sel_detections[detpass]).det[tt]).xy = REFORM(xy[*,tt])
@@ -1310,7 +1310,7 @@ PRO EBDETECT, ConfigFile, OVERRIDE_PARAMS=override_params, VERBOSE=verbose, $
                   IF KEYWORD_SET(params.get_centroids) THEN BEGIN
                     tmp_kernel_mask[kernelpositions] = 1B
                     kernel_centroid = EBDETECT_GET_CENTROID(*kernels[j], $
-                      tmp_kernel_mask, /FLUX)
+                      tmp_kernel_mask, /FLUX, NWSUMS=nwsums)
                     *kernels[j] = CREATE_STRUCT(*kernels[j], $
                       'xy', kernel_centroid.xy_geom, $
                       'xy_flux', kernel_centroid.xy_flux)
